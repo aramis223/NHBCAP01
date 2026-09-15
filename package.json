@@ -1,0 +1,32 @@
+{
+	"name": "NHBCAP01",
+	"version": "1.0.0",
+	"dependencies": {
+		"@cap-js/hana": "^2",
+		"@sap/cds": "^9"
+	},
+	"devDependencies": {
+		"@cap-js/sqlite": "^2.4",
+		"@sap/dev-cap-tools": "^1.31.0",
+		"cds-plugin-ui5": "^0.17.0"
+	},
+	"scripts": {
+		"start": "cds-serve",
+		"watch-customer-ui": "cds watch --open nhb.cap.customer.customerui/index.html?sap-ui-xx-viewCache=false --livereload false"
+	},
+	"private": true,
+	"workspaces": [
+		"app/*"
+	],
+	"cds": {
+		"requires": {
+			"TemenosCustomerService": {
+				"credentials": {
+					"url": "http://localhost:5001/temenos"
+				},
+				"kind": "odata",
+				"model": "srv/external/temenos.cds"
+			}
+		}
+	}
+}

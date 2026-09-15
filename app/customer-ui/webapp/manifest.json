@@ -1,0 +1,117 @@
+{
+  "_version": "1.89.0",
+  "sap.app": {
+    "id": "nhb.cap.customer.customerui",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "sourceTemplate": {
+      "id": "@sap/generator-fiori:basic",
+      "version": "1.32.0",
+      "toolsId": "c7bb4732-a13d-4f1b-82b3-d9dc4ee990cd"
+    },
+    "dataSources": {
+      "mainService": {
+        "uri": "/service/NHBCAP01Service/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.152.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "nhb.cap.customer.customerui.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "resources": {
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "controlAggregation": "pages",
+        "controlId": "app",
+        "transition": "slide",
+        "type": "View",
+        "viewType": "XML",
+        "path": "nhb.cap.customer.customerui.view",
+        "async": true,
+        "viewPath": "nhb.cap.customer.customerui.view"
+      },
+      "routes": [
+        {
+          "name": "RouteCustomer",
+          "pattern": ":?query:",
+          "target": [
+            "TargetCustomer"
+          ]
+        }
+      ],
+      "targets": {
+        "TargetCustomer": {
+          "id": "Customer",
+          "name": "Customer"
+        }
+      }
+    },
+    "rootView": {
+      "viewName": "nhb.cap.customer.customerui.view.App",
+      "type": "XML",
+      "id": "App",
+      "async": true
+    }
+  }
+}

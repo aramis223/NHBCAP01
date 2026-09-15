@@ -1,0 +1,161 @@
+<mvc:View
+controllerName="nhb.cap.customer.customerui.controller.Customer"
+xmlns:mvc="sap.ui.core.mvc"
+xmlns="sap.m">
+
+<Page id="page" title="Temenos Customer">
+
+    <content>
+
+        <VBox id="customerInfoBox" class="sapUiSmallMargin">
+
+            <Label
+                id="customerIdInputLabel"
+                text="Enter Customer ID"/>
+
+            <Input
+                id="customerIdInput"
+                value=""
+                width="15rem"
+                submit=".onSearch"/>
+
+            <Button
+                id="searchButton"
+                text="Search"
+                press=".onSearch"/>
+
+            <Title
+                id="customerInfoTitle"
+                text="Customer Information"/>
+
+            <Label
+                id="customerIdLabel"
+                text="Customer ID"/>
+
+            <Text
+                id="customerIdText"
+                text="{customerId}"/>
+
+            <Label
+                id="customerNameLabel"
+                text="Name"/>
+
+            <Text
+                id="customerNameText"
+                text="{name}"/>
+
+            <Label
+                id="customerTypeLabel"
+                text="Customer Type"/>
+
+            <List
+                id="temenosAccountList"
+                headerText="Customer Accounts"
+                items="{accounts}">
+
+            <StandardListItem
+                id="temenosAccountItem"
+                title="{accountNumber}"
+                description="{accountType}"
+                info="{currency}"/>
+
+</List>
+
+            <List
+                id="customerList"
+                headerText="All Temenos Customers"
+                items="{/TemenosCustomer}">
+
+                <StandardListItem
+                    id="customerListItem"
+                    title="{name}"
+                    description="{customerId}"
+                    info="{customerType}"
+                    type="Active"
+                    press=".onCustomerPress"/>
+
+            </List>
+
+            <Title
+                id="createCustomerTitle"
+                text="Create Customer"/>
+
+            <Label
+                id="createCustomerNumberLabel"
+                text="Customer Number"/>
+
+            <Input
+                id="createCustomerNumberInput"
+                width="15rem"/>
+
+            <Label
+                id="createCustomerNameLabel"
+                text="Name"/>
+
+            <Input
+                id="createCustomerNameInput"
+                width="15rem"/>
+
+            <Label
+                id="createCustomerTypeLabel"
+                text="Customer Type"/>
+
+            <Input
+                id="createCustomerTypeInput"
+                width="15rem"/>
+
+            <Button
+                id="createCustomerButton"
+                text="Create Customer"
+                press=".onCreateCustomer"/>
+
+            <Title
+                id="updateCustomerTitle"
+                text="Update Customer"/>
+
+            <Label
+                id="updateCustomerNumberLabel"
+                text="Customer Number"/>
+
+            <Input
+                id="updateCustomerNumberInput"
+                width="15rem"/>
+
+            <Label
+                id="updateCustomerNameLabel"
+                text="New Name"/>
+
+            <Input
+                id="updateCustomerNameInput"
+                width="15rem"/>
+
+            <Button
+                id="updateCustomerButton"
+                text="Update Customer"
+                press=".onUpdateCustomer"/>
+            
+            <Title
+                id="deleteCustomerTitle"
+                text="Delete Customer"/>
+
+            <Label
+                id="deleteCustomerNumberLabel"
+                text="Customer Number"/>
+
+            <Input
+                id="deleteCustomerNumberInput"
+                width="15rem"/>
+
+            <Button
+                id="deleteCustomerButton"
+                text="Delete Customer"
+                type="Reject"
+                press=".onDeleteCustomer"/>
+        </VBox>
+
+    </content>
+
+</Page>
+
+
+</mvc:View>

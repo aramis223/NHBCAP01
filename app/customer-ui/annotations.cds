@@ -1,0 +1,1 @@
+using NHBCAP01Service as service from '../../srv/service';
