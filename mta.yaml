@@ -1,0 +1,53 @@
+_schema-version: 3.3.0
+ID: NHBCAP01
+version: 1.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+modules:
+  - name: NHBCAP01-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      instances: 1
+      buildpack: nodejs_buildpack
+    build-parameters:
+      builder: npm-ci
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: NHBCAP01-auth
+      - name: NHBCAP01-db
+      - name: NHBCAP01-destination
+
+  - name: NHBCAP01-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: NHBCAP01-db
+
+resources:
+  - name: NHBCAP01-auth
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: nhb-xsuaa
+
+  - name: NHBCAP01-db
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: nhb-hdi
+  - name: NHBCAP01-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite

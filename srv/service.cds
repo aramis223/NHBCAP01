@@ -12,6 +12,7 @@ service NHBCAP01Service
     entity Account as
     projection on my.Account;
 
+    @cds.persistence.skip
     entity NHBCustomer
     {
         key CustomerNumber : String;
@@ -19,6 +20,7 @@ service NHBCAP01Service
         CustomerType       : String;
     }
 
+    @cds.persistence.skip
     entity TemenosCustomer
     {
         key customerId : String;
@@ -29,6 +31,7 @@ service NHBCAP01Service
             on accounts.customer_customerId = customerId;
     }
 
+    @cds.persistence.skip
     entity TemenosAccount
     {
         key accountId             : String;
