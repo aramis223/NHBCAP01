@@ -321,3 +321,103 @@ JSON response
 The first CAP operation will be **read-only Get Account Details**.
 
 No CREATE, UPDATE, DELETE, or transactional banking operation will be introduced at this stage.
+
+## CAP Service Integration and NHB Response Mapping
+
+The Fiserv integration was extended from an isolated API client to a working CAP service operation.
+
+### CAP Service Operation
+
+The NHB CAP service exposes:
+
+`getFiservAccountDetails(accountId)`
+
+The operation accepts an NHB account identifier and invokes the Fiserv account service through the local Fiserv client.
+
+The CAP service does not expose the raw Fiserv response directly.
+
+### End-to-End Flow
+
+```text
+NHB Consumer
+    ↓
+NHB CAP Service
+    ↓
+Fiserv OAuth 2.0
+    ↓
+Fiserv Banking Hub
+    ↓
+Finxact
+    ↓
+Fiserv Account Response
+    ↓
+NHB CAP Mapping
+    ↓
+NHB FiservAccount Contract
+```
+
+The integration was successfully tested against the Fiserv Banking Hub certification environment and Finxact provider.
+
+The successful response contained:
+
+* `StatusCode = 0`
+* `StatusDesc = Success`
+* `SvcProviderName = Finxact`
+* DDA account information
+* account status
+* currency
+* account balances
+
+### NHB Response Contract
+
+NHB CAP defines its own business-oriented response contract:
+
+```text
+FiservAccount
+├── accountId
+├── accountType
+├── description
+├── currency
+├── accountTitle
+├── openDate
+├── status
+└── balances[]
+    ├── balanceType
+    ├── amount
+    └── currency
+```
+
+The balance collection is mapped from the Fiserv `AcctBal` structure.
+
+### Response Transformation
+
+The Fiserv response uses provider-specific structures such as:
+
+* `AcctRec`
+* `AcctKeys`
+* `DepositAcctInfo`
+* `AcctBal`
+* `CurAmt`
+* `AcctStatus`
+
+NHB CAP transforms these structures into the NHB service contract before returning the response to the consumer.
+
+This creates an abstraction boundary between NHB and Fiserv and prevents the Fiserv provider-specific response model from becoming part of the NHB API contract.
+
+### Architectural Learning
+
+This milestone demonstrates the intended integration pattern:
+
+```text
+NHB Business Contract
+        ↑
+   CAP Mapping
+        ↑
+Provider API Contract
+```
+
+NHB CAP acts as the integration/orchestration layer. It consumes the external Fiserv API and translates the provider-specific response into an NHB-oriented contract.
+
+The Fiserv integration therefore follows the same architectural principle established for the Temenos integration: **NHB CAP owns the integration boundary rather than exposing the external core-banking API model directly.**
+
+No API keys, secrets, access tokens, or other credentials are stored in source code or documentation.

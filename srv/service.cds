@@ -41,4 +41,27 @@ service NHBCAP01Service
         balance                   : Decimal(15,2);
         customer_customerId       : String;
     }
+
+   type FiservBalance {
+    balanceType : String;
+    amount      : Decimal(15,2);
+    currency    : String;
+}
+
+type FiservAccount {
+    accountId   : String;
+    accountType : String;
+    description : String;
+    currency    : String;
+    accountTitle: String;
+    openDate    : Date;
+    status      : String;
+    balances    : many FiservBalance;
+}
+
+function getFiservAccountDetails(
+    accountId : String
+) returns FiservAccount;
+
+
 }

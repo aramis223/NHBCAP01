@@ -20,4 +20,6 @@ mta_archives/
 
 .env/
 env/
+.gen/.env
+.env
 .gen/
