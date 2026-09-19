@@ -247,37 +247,36 @@ NHB CAP does not access the Finxact database directly.
 
 Instead, CAP consumes APIs exposed through the Fiserv Banking Hub. This preserves the separation between the NHB integration layer and the external banking platform.
 
-### Relationship to the Temenos Integration
+### Core-Banking Integration Direction
 
-Fiserv is an additional integration target for the NHBCAP01 learning project.
+Fiserv Banking Hub / Finxact is the sole external core-banking integration target for NHBCAP01.
 
-It does **not** replace Temenos in the NHB target architecture.
+The Temenos access request was not approved. The existing Temenos mock, service model, and UI remain only as legacy learning artifacts until they are safely retired; they are not part of the target architecture.
 
-The learning landscape can therefore be represented as:
+The target landscape is:
 
 ```text
-                         ┌───────────────┐
-                         │   SAP APIs    │
-                         └───────▲───────┘
-                                 │
-                                 │
-┌──────────────┐         ┌───────┴───────┐
-│ Temenos APIs │◄────────│    NHB CAP    │
-└──────────────┘         │ Orchestration  │
-                         │     Layer      │
-                         └───────┬───────┘
-                                 │
-                                 ▼
-                         ┌───────────────┐
-                         │ Fiserv /      │
-                         │   Finxact     │
-                         └───────────────┘
+┌─────────────────────────────────┐
+│ Fiserv Banking Hub / Finxact    │
+│ Core banking and account data   │
+└───────────────┬─────────────────┘
+                │ REST / JSON + OAuth 2.0
+                ▼
+┌─────────────────────────────────┐
+│ NHB CAP                         │
+│ Product and integration layer   │
+└───────────────┬─────────────────┘
+                │ OData V2 / SOAP
+                ▼
+┌─────────────────────────────────┐
+│ SAP S/4HANA                     │
+│ Business partner, accounting,   │
+│ cash-flow and liquidity APIs    │
+└─────────────────────────────────┘
 ```
 
-This provides an opportunity to learn two different external integration styles:
+Fiserv / Finxact uses REST/JSON APIs with OAuth 2.0. CAP owns the integration boundary and translates external provider data into NHB product contracts.
 
-* **Temenos:** OData-based integration and query/filter transformation
-* **Fiserv / Finxact:** REST/JSON integration with OAuth 2.0 authentication
 
 ### Learning Outcome
 

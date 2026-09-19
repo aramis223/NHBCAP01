@@ -8,7 +8,7 @@ This catalog defines the SAP S/4HANA preparation, integration, and regression te
 
 - SAP S/4HANA 2025 FPS01 appliance on SAP Cloud Appliance Library
 - NHB CAP integration layer
-- Connected systems: Temenos and Fiserv
+- Connected system: Fiserv Banking Hub / Finxact; the Temenos mock is a legacy learning artifact and not part of the target architecture
 - AWS account: paid plan with budget alerts configured
 
 ## 3. SAP scope
