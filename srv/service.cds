@@ -12,6 +12,10 @@ service NHBCAP01Service
     entity Account as
     projection on my.Account;
 
+    @cds.redirection.target
+    entity MurabahaFinancing as
+    projection on my.MurabahaFinancing;
+
     @cds.persistence.skip
     entity NHBCustomer
     {
