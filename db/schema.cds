@@ -1,33 +1,77 @@
 namespace NHBCAP01;
 
-entity Customer
-{
-    key ID : UUID;
-    CustomerNumber : String(100);
-    Name : String(100);
-    CustomerType : String(50);
-    accounts : Association to many Account on accounts.customer = $self;
+using { cuid, managed } from '@sap/cds/common';
+
+entity Customer {
+    key ID             : UUID;
+    CustomerNumber     : String(100);
+    Name               : String(100);
+    CustomerType       : String(50);
+    accounts           : Association to many Account
+                             on accounts.customer = $self;
+    murabahaContracts  : Association to many MurabahaFinancing
+                             on murabahaContracts.customer = $self;
 }
 
-entity Account
-{
-    key ID : UUID;
+entity Account {
+    key ID   : UUID;
     customer : Association to one Customer;
 }
 
-using { cuid, managed } from '@sap/cds/common';
-
 entity MurabahaFinancing : cuid, managed {
-    customer          : Association to one Customer;
-    finxactAccountId  : String(100);
-    contractReference : String(100) not null;
-    assetDescription  : String(500) not null;
-    supplierName      : String(100);
-    assetCost          : Decimal(15,2) not null;
-    profitAmount       : Decimal(15,2) not null;
-    salePrice          : Decimal(15,2) not null;
-    currency           : String(3) default 'USD';
-    contractDate       : Date;
-    maturityDate       : Date;
-    status             : String(30) default 'DRAFT';
+    customer                   : Association to one Customer;
+    finxactAccountId           : String(100);
+    contractReference          : String(100) not null;
+    assetDescription           : String(500) not null;
+    supplierName               : String(100);
+    assetCost                  : Decimal(15,2) not null;
+    profitAmount               : Decimal(15,2) not null;
+    salePrice                  : Decimal(15,2) not null;
+    currency                   : String(3) default 'USD';
+    contractDate               : Date;
+    maturityDate               : Date;
+
+    creditDecisionStatus       : String(30) default 'PENDING';
+    creditDecisionDate         : Date;
+    creditDecisionReference    : String(100);
+    shariaApprovalStatus       : String(30) default 'PENDING';
+    shariaApprovalDate         : Date;
+    shariaApprovalReference    : String(100);
+
+    bankOwnershipRecorded      : Boolean default false;
+    assetAcquisitionDate       : Date;
+    ownershipEvidenceReference : String(100);
+    saleContractExecutedOn     : Date;
+    saleContractReference      : String(100);
+    assetDeliveredOn           : Date;
+    deliveryEvidenceReference  : String(100);
+
+    status                     : String(30) default 'DRAFT';
+    installments               : Association to many MurabahaInstallment
+                                     on installments.financing = $self;
+    payments                   : Association to many MurabahaPayment
+                                     on payments.financing = $self;
+}
+
+entity MurabahaInstallment : cuid, managed {
+    financing         : Association to one MurabahaFinancing;
+    sequenceNumber    : Integer not null;
+    dueDate           : Date not null;
+    principalAmount   : Decimal(15,2) not null;
+    profitAmount      : Decimal(15,2) not null;
+    installmentAmount : Decimal(15,2) not null;
+    paidAmount        : Decimal(15,2) default 0;
+    status            : String(30) default 'PENDING';
+    payments          : Association to many MurabahaPayment
+                            on payments.installment = $self;
+}
+
+entity MurabahaPayment : cuid, managed {
+    financing         : Association to one MurabahaFinancing;
+    installment       : Association to one MurabahaInstallment;
+    externalPaymentId : String(100);
+    paymentDate       : Date not null;
+    amount            : Decimal(15,2) not null;
+    currency          : String(3) default 'USD';
+    status            : String(30) default 'RECEIVED';
 }

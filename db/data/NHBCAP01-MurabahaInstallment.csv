@@ -1,0 +1,4 @@
+ID,financing_ID,sequenceNumber,dueDate,principalAmount,profitAmount,installmentAmount,paidAmount,status
+bbbbbbbb-bbbb-bbbb-bbbb-000000000001,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,1,2026-10-20,10000.00,1500.00,11500.00,11500.00,PAID
+bbbbbbbb-bbbb-bbbb-bbbb-000000000002,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,2,2027-02-20,10000.00,1500.00,11500.00,0.00,PENDING
+bbbbbbbb-bbbb-bbbb-bbbb-000000000003,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,3,2027-09-20,10000.00,1500.00,11500.00,0.00,PENDING

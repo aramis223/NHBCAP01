@@ -1,0 +1,2 @@
+ID,financing_ID,installment_ID,externalPaymentId,paymentDate,amount,currency,status
+cccccccc-cccc-cccc-cccc-000000000001,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-000000000001,FISERV-PAY-0001,2026-10-20,11500.00,USD,POSTED
