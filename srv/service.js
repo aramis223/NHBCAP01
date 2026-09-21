@@ -55,7 +55,7 @@ const validateNonNegative = (req, field, value) => {
 
 module.exports = cds.service.impl(async function () {
     const db = await cds.connect.to('db');
-    const temenos = await cds.connect.to('TemenosCustomerService');
+    // const temenos = await cds.connect.to('TemenosCustomerService'); // obsolete integration disabled
     const { MurabahaFinancing } = this.entities;
     const {
         MurabahaFinancing: FinancingDB,

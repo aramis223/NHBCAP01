@@ -4,15 +4,15 @@
   "dependencies": {
     "@cap-js/hana": "^2",
     "@sap/cds": "^9",
-    "@sap/xssec": "^4"
+    "@sap/xssec": "^4",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
     "@cap-js/sqlite": "^2.4",
     "@sap/cds-dk": "^10",
     "@sap/dev-cap-tools": "^1.31.0",
-    "cds-plugin-ui5": "^0.17.0",
-    "dotenv": "^17.4.2"
+    "cds-plugin-ui5": "^0.17.0"
   },
   "scripts": {
     "start": "cds-serve",
@@ -23,20 +23,7 @@
     "app/*"
   ],
   "cds": {
-    "requires": {
-      "TemenosCustomerService": {
-        "kind": "odata",
-        "model": "srv/external/temenos.cds",
-        "credentials": {
-          "url": "http://localhost:5001/temenos"
-        },
-        "[production]": {
-          "credentials": {
-            "destination": "NHBTEMENOS"
-          }
-        }
-      }
-    },
+    "requires": {},
     "[production]": {
       "auth": "xsuaa"
     }
