@@ -81,3 +81,16 @@ test('rejects an overpayment without creating a payment', async () => {
   assert.equal(after.status, 'PENDING');
   assert.equal((await paymentsWithReference(reference)).length, 0);
 });
+
+test('marks an installment paid when the full balance is received', async () => {
+  const reference = 'TEST-AUTO-FULL-001';
+  const posted = await postPayment(reference, 11500);
+  const after = await installment();
+  const payments = await paymentsWithReference(reference);
+
+  assert.equal(posted.externalPaymentId, reference);
+  assert.equal(posted.status, 'POSTED');
+  assert.equal(Number(after.paidAmount), 11500);
+  assert.equal(after.status, 'PAID');
+  assert.equal(payments.length, 1);
+});
