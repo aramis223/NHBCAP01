@@ -55,7 +55,6 @@ const validateNonNegative = (req, field, value) => {
 
 module.exports = cds.service.impl(async function () {
     const db = await cds.connect.to('db');
-    // const temenos = await cds.connect.to('TemenosCustomerService'); // obsolete integration disabled
     const { MurabahaFinancing } = this.entities;
     const {
         MurabahaFinancing: FinancingDB,
@@ -448,73 +447,5 @@ module.exports = cds.service.impl(async function () {
             console.error('Fiserv account request failed:', error);
             return req.reject(502, 'Fiserv service is currently unavailable.');
         }
-    });
-
-    this.on('READ', 'NHBCustomer', async req => {
-        console.log('NHBCustomer READ request received');
-        console.log('NHBCustomer request params:', req.params);
-        console.log(
-            'NHBCustomer request where:',
-            JSON.stringify(req.query.SELECT.where)
-        );
-
-        const where = req.query.SELECT.where;
-
-        if (where) {
-            console.log('Filter field:', where[0].ref[0]);
-            console.log('Filter value:', where[2].val);
-        }
-
-        try {
-            let customers;
-
-            if (req.params.length) {
-                customers = await temenos.run(
-                    SELECT.from('Customers').where({
-                        customerId: req.params[0].CustomerNumber
-                    })
-                );
-            } else {
-                const query = SELECT.from('Customers');
-
-                if (where) {
-                    query.where({ customerType: where[2].val });
-                }
-
-                customers = await temenos.run(query);
-            }
-
-            return customers.map(customer => ({
-                CustomerNumber: customer.customerId,
-                Name: customer.name,
-                CustomerType: customer.customerType
-            }));
-        } catch (error) {
-            console.error('NHBCustomer request failed:', error);
-            return req.reject(502, 'Temenos service is currently unavailable.');
-        }
-    });
-
-    this.on('READ', 'TemenosAccount', async req => {
-        console.log('TemenosAccount READ request received');
-        console.log(req.query);
-        console.log(req.params);
-
-        if (req.params?.length && req.params[0].customerId) {
-            const customerId = req.params[0].customerId;
-
-            try {
-                return await temenos.run(
-                    SELECT.from('Accounts').where({
-                        customer_customerId: customerId
-                    })
-                );
-            } catch (error) {
-                console.error('TemenosAccount request failed:', error);
-                return req.reject(502, 'Temenos service is currently unavailable.');
-            }
-        }
-
-        return temenos.run(SELECT.from('Accounts'));
     });
 });

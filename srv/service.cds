@@ -31,26 +31,7 @@ service NHBCAP01Service {
         Name               : String;
         CustomerType       : String;
     }
-
-    @cds.persistence.skip
-    entity TemenosCustomer {
-        key customerId : String;
-        name           : String;
-        customerType   : String;
-        accounts       : Association to many TemenosAccount
-                             on accounts.customer_customerId = customerId;
-    }
-
-    @cds.persistence.skip
-    entity TemenosAccount {
-        key accountId       : String;
-        accountNumber       : String;
-        accountType         : String;
-        currency            : String;
-        balance             : Decimal(15,2);
-        customer_customerId : String;
-    }
-
+       
     type FiservBalance {
         balanceType : String;
         amount      : Decimal(15,2);
