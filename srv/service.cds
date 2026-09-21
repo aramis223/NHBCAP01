@@ -22,6 +22,9 @@ service NHBCAP01Service {
     @readonly
     entity MurabahaPayment as projection on my.MurabahaPayment;
 
+    @readonly
+    entity MurabahaPaymentReversal as projection on my.MurabahaPaymentReversal;
+
     @cds.persistence.skip
     entity NHBCustomer {
         key CustomerNumber : String;
@@ -77,6 +80,13 @@ service NHBCAP01Service {
         amount           : Decimal(15,2),
         currency         : String(3)
     ) returns MurabahaPayment;
+
+    action reverseMurabahaPayment(
+        paymentId          : UUID,
+        externalReversalId : String(100),
+        reversalDate       : Date,
+        reason             : String(500)
+    ) returns MurabahaPaymentReversal;
 }
 
 annotate NHBCAP01Service.MurabahaFinancing with @(

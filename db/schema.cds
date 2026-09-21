@@ -75,3 +75,18 @@ entity MurabahaPayment : cuid, managed {
     currency          : String(3) default 'USD';
     status            : String(30) default 'RECEIVED';
 }
+
+
+entity MurabahaPaymentReversal : cuid, managed {
+    payment            : Association to one MurabahaPayment;
+    financing          : Association to one MurabahaFinancing;
+    installment        : Association to one MurabahaInstallment;
+    externalReversalId : String(100) not null;
+    reversalDate       : Date not null;
+    reason             : String(500) not null;
+    amount             : Decimal(15,2) not null;
+    currency           : String(3) not null;
+}
+
+annotate MurabahaPaymentReversal with @assert.unique.reversalReference: [ externalReversalId ];
+annotate MurabahaPaymentReversal with @assert.unique.originalPayment: [ payment ];

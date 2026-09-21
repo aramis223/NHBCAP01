@@ -60,7 +60,8 @@ module.exports = cds.service.impl(async function () {
     const {
         MurabahaFinancing: FinancingDB,
         MurabahaInstallment: InstallmentDB,
-        MurabahaPayment: PaymentDB
+        MurabahaPayment: PaymentDB,
+        MurabahaPaymentReversal: ReversalDB
     } = cds.entities('NHBCAP01');
 
     console.log('Fiserv environment check:', {
@@ -326,6 +327,92 @@ module.exports = cds.service.impl(async function () {
             return req.reject(404, 'Murabaha installment was not found.');
         }
         return postPayment(req, installment.financing_ID, installmentId, req.data);
+    });
+
+    this.on('reverseMurabahaPayment', async req => {
+        const { paymentId, externalReversalId, reversalDate, reason } = req.data;
+        const reference = externalReversalId?.trim();
+        const explanation = reason?.trim();
+        if (!paymentId || !reference || !reversalDate || !explanation) {
+            return req.reject(400, 'Payment ID, reversal reference, date, and reason are required.');
+        }
+
+        // The request's managed transaction keeps the audit record and balance update together.
+        const payment = await db.run(
+            SELECT.one.from(PaymentDB).where({ ID: paymentId })
+        );
+        if (!payment) {
+            return req.reject(404, 'Murabaha payment was not found.');
+        }
+        if (payment.status !== 'POSTED') {
+            return req.reject(409, 'Only a posted payment can be reversed; this payment may already be reversed.');
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: payment.financing_ID })
+        );
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+        if (financing.status === 'SETTLED') {
+            return req.reject(409, 'A settled financing cannot be reversed without an approved adjustment workflow.');
+        }
+
+        const duplicateReference = await db.run(
+            SELECT.one.from(ReversalDB).where({ externalReversalId: reference })
+        );
+        if (duplicateReference) {
+            return req.reject(409, 'A reversal with this external reversal ID already exists.');
+        }
+        const priorReversal = await db.run(
+            SELECT.one.from(ReversalDB).where({ payment_ID: paymentId })
+        );
+        if (priorReversal) {
+            return req.reject(409, 'This payment has already been reversed.');
+        }
+
+        const installment = await db.run(
+            SELECT.one.from(InstallmentDB).where({ ID: payment.installment_ID })
+        );
+        if (!installment || installment.financing_ID !== payment.financing_ID) {
+            return req.reject(409, 'The original payment installment is inconsistent.');
+        }
+        const paymentAmount = amount(payment.amount);
+        const paidAmount = amount(installment.paidAmount) || 0;
+        if (!Number.isFinite(paymentAmount) || paidAmount - paymentAmount < -0.009) {
+            return req.reject(409, 'The installment balance cannot support this reversal.');
+        }
+        const newPaidAmount = Number((paidAmount - paymentAmount).toFixed(2));
+        const newInstallmentStatus = newPaidAmount <= 0.009
+            ? 'PENDING'
+            : Math.abs(newPaidAmount - amount(installment.installmentAmount)) <= 0.009
+                ? 'PAID'
+                : 'PARTIALLY_PAID';
+        const reversalId = cds.utils.uuid();
+
+        await db.run(
+            INSERT.into(ReversalDB).entries({
+                ID: reversalId,
+                payment_ID: paymentId,
+                financing_ID: payment.financing_ID,
+                installment_ID: payment.installment_ID,
+                externalReversalId: reference,
+                reversalDate,
+                reason: explanation,
+                amount: paymentAmount,
+                currency: payment.currency
+            })
+        );
+        await db.run(
+            UPDATE(PaymentDB).set({ status: 'REVERSED' }).where({ ID: paymentId })
+        );
+        await db.run(
+            UPDATE(InstallmentDB)
+                .set({ paidAmount: newPaidAmount, status: newInstallmentStatus })
+                .where({ ID: payment.installment_ID })
+        );
+
+        return db.run(SELECT.one.from(ReversalDB).where({ ID: reversalId }));
     });
 
     this.on('getFiservAccountDetails', async req => {
