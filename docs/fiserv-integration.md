@@ -1,43 +1,62 @@
 # Fiserv Banking Hub / Finxact Integration
 
-## Purpose
+## 1. Purpose
 
-This document records the NHBCAP01 learning integration with the Fiserv Banking Hub and its Finxact account-processing environment.
+This document records the NHBCAP01 learning integration with Fiserv Banking Hub and the Finxact account-processing environment.
 
-The purpose of this integration is to demonstrate how NHB CAP can consume an external banking API through a modern API-based integration pattern.
+The purpose is to demonstrate how NHB CAP consumes an external banking API while maintaining an NHB-owned service contract and integration boundary.
 
-This is a **learning and portfolio integration**, not a replacement of the target NHB core-banking architecture.
+This is a **learning and portfolio integration**. Fiserv Banking Hub / Finxact is the external core-banking integration target used by NHBCAP01.
 
-The architectural principle remains:
+The architectural pattern is:
 
 ```text
+NHB Consumer
+     │
+     ▼
 NHB CAP
-   │
-   ├── SAP APIs
-   ├── Temenos APIs
-   └── Fiserv Banking Hub / Finxact APIs
+Integration / Orchestration Layer
+     │
+     │ REST / JSON
+     │ OAuth 2.0
+     ▼
+Fiserv Banking Hub
+     │
+     ▼
+Finxact
+Account Processing
 ```
 
-NHB CAP acts as the integration/orchestration layer. External banking platforms remain responsible for their own banking-domain data and processing.
+NHB CAP does not expose the Finxact provider model directly. CAP consumes the external API and maps the provider-specific response into an NHB-oriented service contract.
 
-## Scope
+---
 
-The initial Fiserv integration focuses on:
+## 2. Scope
 
-* Fiserv Banking Hub
-* Finxact account-processing APIs
-* OAuth 2.0 client-credentials authentication
-* Finxact Account Service
-* Account Service — Get Account Details
-* JSON request/response handling
-* API testing with Postman
-* Future implementation of the integration from NHB CAP
+The implemented integration currently covers:
 
-The current milestone validates the external API independently through Postman before implementing the same integration pattern in CAP.
+- Fiserv Banking Hub certification environment
+- Finxact account-processing APIs
+- OAuth 2.0 Client Credentials authentication
+- Finxact Account Service
+- Deposit / DDA account lookup
+- Get Account Details
+- JSON request and response processing
+- Postman API validation
+- CAP-based OAuth authentication
+- CAP-to-Fiserv API invocation
+- Provider-to-NHB response transformation
+- NHB OData exposure
 
-## Authentication
+The first implementation is deliberately read-only.
 
-The Fiserv Banking Hub integration uses **OAuth 2.0 Client Credentials**.
+No account CREATE, UPDATE, DELETE, funds movement, or other transactional banking operation is included at this stage.
+
+---
+
+## 3. Authentication
+
+Fiserv Banking Hub uses **OAuth 2.0 Client Credentials**.
 
 The authentication flow is:
 
@@ -54,78 +73,68 @@ Access Token
 Bearer Authentication
           │
           ▼
-Finxact API
+Fiserv Banking Hub / Finxact API
 ```
-
-The API key and API secret are used only to obtain an OAuth access token. The access token is then supplied as a Bearer token when invoking Finxact APIs.
-
-### OAuth Token Request
 
 The token request uses:
 
-* HTTP method: `POST`
-* Authentication: HTTP Basic Authentication
-* Username: Fiserv API Key
-* Password: Fiserv API Secret
-* Content type: `application/x-www-form-urlencoded`
-* Grant type: `client_credentials`
+- HTTP method: `POST`
+- Authentication: HTTP Basic Authentication
+- Username: Fiserv API Key
+- Password: Fiserv API Secret
+- Content type: `application/x-www-form-urlencoded`
+- Grant type: `client_credentials`
 
-The token endpoint is provided by the Fiserv Banking Hub environment.
+The resulting access token is supplied as a Bearer token when invoking the Banking Hub API.
 
-The successful response contains an `access_token`, which is used for subsequent API requests.
+---
 
-### Postman
+## 4. Security Rules
 
-The official Fiserv Banking Hub Postman collection was used for API testing.
+Credentials and access tokens must never be committed to Git or stored in application source files.
 
-The imported collection provides environment variables for:
+NHBCAP01 follows these rules:
 
-* Banking Hub host
-* OAuth token host
-* Organization ID
-* OAuth token
-* Finxact test data
+- API keys and API secrets remain external to source code.
+- OAuth access tokens are temporary.
+- Tokens must not be documented.
+- Secrets must not be placed in `service.js`, CDS files, Markdown documentation, or Git history.
+- Runtime configuration is supplied through environment variables or platform-managed configuration.
+- Any credential accidentally exposed during experimentation must be treated as compromised and replaced.
+- Logs should confirm only whether required configuration exists, not print secret values.
 
-The official collection also manages the required `EFXHeader` containing the organization identifier.
+The relevant runtime configuration includes:
 
-This approach was preferred over manually constructing the request because it provides the API-specific headers, variables, request bodies, and authentication configuration supplied by Fiserv.
+```text
+FISERV_API_BASE_URL
+FISERV_TOKEN_URL
+FISERV_API_KEY
+FISERV_API_SECRET
+FISERV_TEST_ACCOUNT_ID
+FISERV_ORG_ID
+```
 
-### Security
+Actual secret values are intentionally excluded from this document.
 
-Credentials and access tokens must **not** be committed to Git or stored in project source files.
+---
 
-For the NHBCAP01 learning project:
+## 5. Initial Postman Validation
 
-* API keys and API secrets remain in Postman secure variables.
-* OAuth access tokens are temporary and must not be documented.
-* Credentials must never be placed in `service.js`, CDS files, `.md` documentation, or Git history.
-* Any credential accidentally exposed during experimentation should be treated as compromised and replaced.
+The official Fiserv Banking Hub Postman collection was used to validate the API independently before implementing the same interaction in CAP.
 
-The documentation describes the authentication pattern but intentionally does not contain actual credentials.
-
-## Successful Finxact API Test
-
-### Get Account Details
-
-The first successful Finxact API operation was:
+The first successful operation was:
 
 **Account Service → Deposit → DDA → Get Account Details**
 
-The operation was executed through the official Fiserv Banking Hub Postman collection.
-
 The request uses:
 
-* HTTP method: `POST`
-* Finxact Account Service
-* Operation: `Get Account Details`
-* Account type: `DDA`
-* Authentication: OAuth 2.0 Bearer token
-* Organization identifier: supplied through the official `EFXHeader`
-* Request format: JSON
+- HTTP method: `POST`
+- Account type: `DDA`
+- OAuth 2.0 Bearer authentication
+- Organization identifier through `EFXHeader`
+- JSON request and response payloads
 
-### Request Structure
-
-The request follows the Finxact API schema:
+The request structure is:
 
 ```json
 {
@@ -138,238 +147,113 @@ The request follows the Finxact API schema:
 }
 ```
 
-The account identifier is supplied through a Postman environment variable rather than being hard-coded into the request.
+The account identifier is supplied through runtime/test configuration rather than being hard-coded into the application.
 
-### Successful Response
+The successful Finxact response demonstrated access to information including:
 
-The API returned a successful Finxact response.
+- Account identification
+- Account type
+- Account description
+- Account status
+- Currency
+- Account balances
+- Account dates
+- Other provider-specific account information
 
-Key response characteristics included:
+This established the external API behavior before CAP implementation.
 
-* `StatusCode`: `0`
-* `StatusDesc`: `Success`
-* `Severity`: `Info`
-* `SvcProviderName`: `Finxact`
-* Account type: DDA
-* Account status: Active / Valid
-* Currency: USD
-* Product: DDA
-* Account description: Personal Checking
-* Open date: July 2026
-* Account balances: zero in the supplied test data
+---
 
-The response also demonstrated that the Finxact API exposes detailed account information including:
+## 6. CAP Fiserv Client
 
-* Account identification
-* Product information
-* Account status
-* Currency
-* Account balances
-* Interest-rate information
-* Statement configuration
-* Overdraft information
-* Account dates
-* Transaction restrictions
-
-### Result
-
-This test successfully demonstrated the following integration path:
+The CAP implementation separates authentication and account access into dedicated modules:
 
 ```text
-Postman
-   │
-   │ OAuth 2.0 Bearer Token
-   ▼
-Fiserv Banking Hub
-   │
-   │ Finxact API
-   ▼
-Finxact Account Service
-   │
-   │ Get Account Details
-   ▼
-Successful JSON Response
+srv/
+├── fiserv/
+│   ├── auth.js
+│   └── accounts.js
+├── service.cds
+└── service.js
 ```
 
-This is the first confirmed real external banking API integration test in the NHBCAP01 learning project.
+### `auth.js`
 
-The test was performed against the Fiserv Banking Hub trial environment using its shared Finxact test environment.
+The authentication module:
 
-### Architectural Significance
+1. Reads Fiserv OAuth configuration from the runtime environment.
+2. Builds HTTP Basic Authentication from the API key and secret.
+3. Calls the OAuth token endpoint.
+4. Requests the `client_credentials` grant.
+5. Validates the token response.
+6. Returns the access token to the calling Fiserv client.
 
-The successful call validates the external API consumption pattern independently of CAP.
+### `accounts.js`
 
-The next implementation step is therefore not to redesign the architecture, but to reproduce this API interaction from NHB CAP.
+The account client:
 
-The intended target pattern is:
+1. Validates the required account and organization identifiers.
+2. Obtains an OAuth access token through `auth.js`.
+3. Creates the required `EFXHeader`.
+4. Calls the Fiserv Get Account Details endpoint.
+5. Sends the Finxact account-selection payload.
+6. Validates the HTTP response.
+7. Validates the Fiserv application-level status.
+8. Returns the provider response to the CAP service layer.
+
+This keeps provider communication separate from the NHB service mapping logic.
+
+---
+
+## 7. CAP Service Operation
+
+NHBCAP01 exposes the function:
 
 ```text
-NHB CAP
-   │
-   │ REST / JSON
-   ▼
-Fiserv Banking Hub
-   │
-   ▼
-Finxact
+getFiservAccountDetails(accountId)
 ```
 
-NHB CAP remains the orchestration/integration layer. Finxact remains responsible for the underlying banking account-processing capability.
-
-## Architecture and Learning Outcome
-
-### Integration Pattern
-
-The Fiserv experiment demonstrates a standard API-based banking integration pattern.
-
-```text
-┌──────────────────────┐
-│      NHB CAP         │
-│ Integration Layer    │
-└──────────┬───────────┘
-           │
-           │ REST / JSON
-           │ OAuth 2.0
-           ▼
-┌──────────────────────┐
-│ Fiserv Banking Hub   │
-│ API Layer            │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│       Finxact        │
-│ Account Processing   │
-└──────────────────────┘
-```
-
-NHB CAP does not access the Finxact database directly.
-
-Instead, CAP consumes APIs exposed through the Fiserv Banking Hub. This preserves the separation between the NHB integration layer and the external banking platform.
-
-### Core-Banking Integration Direction
-
-Fiserv Banking Hub / Finxact is the sole external core-banking integration target for NHBCAP01.
-
-The Temenos access request was not approved. The existing Temenos mock, service model, and UI remain only as legacy learning artifacts until they are safely retired; they are not part of the target architecture.
-
-The target landscape is:
-
-```text
-┌─────────────────────────────────┐
-│ Fiserv Banking Hub / Finxact    │
-│ Core banking and account data   │
-└───────────────┬─────────────────┘
-                │ REST / JSON + OAuth 2.0
-                ▼
-┌─────────────────────────────────┐
-│ NHB CAP                         │
-│ Product and integration layer   │
-└───────────────┬─────────────────┘
-                │ OData V2 / SOAP
-                ▼
-┌─────────────────────────────────┐
-│ SAP S/4HANA                     │
-│ Business partner, accounting,   │
-│ cash-flow and liquidity APIs    │
-└─────────────────────────────────┘
-```
-
-Fiserv / Finxact uses REST/JSON APIs with OAuth 2.0. CAP owns the integration boundary and translates external provider data into NHB product contracts.
-
-
-### Learning Outcome
-
-The Fiserv exercise has demonstrated the complete external API consumption lifecycle independently of CAP:
-
-1. Register for a developer environment.
-2. Create a Banking Hub workspace.
-3. Obtain API credentials.
-4. Authenticate using OAuth 2.0 Client Credentials.
-5. Obtain an access token.
-6. Configure the official Postman collection.
-7. Invoke a Finxact API.
-8. Receive and interpret a successful banking-domain response.
-9. Identify the integration boundary between CAP and an external core-banking platform.
-
-The next phase is to implement this same interaction from **NHB CAP**, while keeping credentials outside the application source code.
-
-### Next Implementation Target
-
-The first CAP implementation will remain deliberately small:
-
-```text
-NHB CAP
-   │
-   │ authenticate
-   ▼
-Fiserv OAuth Endpoint
-   │
-   │ access_token
-   ▼
-NHB CAP
-   │
-   │ Get Account Details
-   ▼
-Fiserv Banking Hub / Finxact
-   │
-   ▼
-JSON response
-```
-
-The first CAP operation will be **read-only Get Account Details**.
-
-No CREATE, UPDATE, DELETE, or transactional banking operation will be introduced at this stage.
-
-## CAP Service Integration and NHB Response Mapping
-
-The Fiserv integration was extended from an isolated API client to a working CAP service operation.
-
-### CAP Service Operation
-
-The NHB CAP service exposes:
-
-`getFiservAccountDetails(accountId)`
-
-The operation accepts an NHB account identifier and invokes the Fiserv account service through the local Fiserv client.
-
-The CAP service does not expose the raw Fiserv response directly.
-
-### End-to-End Flow
+The service flow is:
 
 ```text
 NHB Consumer
-    ↓
-NHB CAP Service
-    ↓
-Fiserv OAuth 2.0
-    ↓
+     │
+     ▼
+getFiservAccountDetails(accountId)
+     │
+     ▼
+CAP service.js
+     │
+     ▼
+srv/fiserv/accounts.js
+     │
+     ├── OAuth via auth.js
+     │
+     ▼
 Fiserv Banking Hub
-    ↓
-Finxact
-    ↓
-Fiserv Account Response
-    ↓
-NHB CAP Mapping
-    ↓
+     │
+     ▼
+Finxact Account Service
+     │
+     ▼
+Provider Response
+     │
+     ▼
+CAP Response Mapping
+     │
+     ▼
 NHB FiservAccount Contract
 ```
 
-The integration was successfully tested against the Fiserv Banking Hub certification environment and Finxact provider.
+The CAP service does not return the complete raw Fiserv payload.
 
-The successful response contained:
+Instead, `service.js` transforms the provider response into an NHB-oriented contract.
 
-* `StatusCode = 0`
-* `StatusDesc = Success`
-* `SvcProviderName = Finxact`
-* DDA account information
-* account status
-* currency
-* account balances
+---
 
-### NHB Response Contract
+## 8. NHB Response Contract
 
-NHB CAP defines its own business-oriented response contract:
+The CAP CDS model defines an NHB-facing response structure:
 
 ```text
 FiservAccount
@@ -386,37 +270,256 @@ FiservAccount
     └── currency
 ```
 
-The balance collection is mapped from the Fiserv `AcctBal` structure.
+The provider response contains Fiserv/Finxact-specific structures such as:
 
-### Response Transformation
+```text
+AcctRec
+AcctKeys
+DepositAcctInfo
+AcctBal
+CurAmt
+AcctStatus
+```
 
-The Fiserv response uses provider-specific structures such as:
+CAP transforms these structures before returning data to the NHB consumer.
 
-* `AcctRec`
-* `AcctKeys`
-* `DepositAcctInfo`
-* `AcctBal`
-* `CurAmt`
-* `AcctStatus`
-
-NHB CAP transforms these structures into the NHB service contract before returning the response to the consumer.
-
-This creates an abstraction boundary between NHB and Fiserv and prevents the Fiserv provider-specific response model from becoming part of the NHB API contract.
-
-### Architectural Learning
-
-This milestone demonstrates the intended integration pattern:
+This creates an abstraction boundary:
 
 ```text
 NHB Business Contract
         ↑
-   CAP Mapping
+        │
+    CAP Mapping
         ↑
+        │
 Provider API Contract
 ```
 
-NHB CAP acts as the integration/orchestration layer. It consumes the external Fiserv API and translates the provider-specific response into an NHB-oriented contract.
+The external provider contract can therefore evolve without requiring NHB consumers to depend directly on Fiserv-specific structures.
 
-The Fiserv integration therefore follows the same architectural principle established for the Temenos integration: **NHB CAP owns the integration boundary rather than exposing the external core-banking API model directly.**
+---
 
-No API keys, secrets, access tokens, or other credentials are stored in source code or documentation.
+## 9. Successful End-to-End CAP Test
+
+The complete integration was successfully tested locally through NHBCAP01.
+
+The verified path was:
+
+```text
+curl / OData Consumer
+        │
+        ▼
+NHBCAP01Service
+        │
+        ▼
+CAP Fiserv Handler
+        │
+        ▼
+Fiserv OAuth
+        │
+        ▼
+OAuth Access Token
+        │
+        ▼
+Fiserv Banking Hub
+        │
+        ▼
+Finxact Account Service
+        │
+        ▼
+Get Account Details
+        │
+        ▼
+Fiserv Response
+        │
+        ▼
+CAP Mapping
+        │
+        ▼
+HTTP 200 + NHB FiservAccount
+```
+
+The successful test returned:
+
+```text
+HTTP/1.1 200 OK
+OData-Version: 4.0
+```
+
+The mapped response demonstrated:
+
+- DDA account identification
+- Personal checking account description
+- USD currency
+- Valid account status
+- Account open date
+- Multiple account balance types
+- Successful transformation into the NHB `FiservAccount` contract
+
+This establishes the first confirmed **CAP-to-real-external-banking-platform integration** in NHBCAP01.
+
+---
+
+## 10. Diagnostic Learning
+
+During testing, one request initially returned:
+
+```text
+HTTP 404
+StatusCode: 1121
+StatusDesc: No Records Found
+ServerStatusDesc: Account not found
+```
+
+This response was useful because it proved that:
+
+- CAP successfully invoked the Fiserv client.
+- OAuth authentication succeeded.
+- Network connectivity succeeded.
+- Banking Hub received the request.
+- Fiserv returned a structured provider response.
+
+The cause was an incorrect/truncated test account identifier rather than an integration defect.
+
+After using the correct configured test account identifier, the same CAP integration returned HTTP 200 successfully.
+
+This demonstrated the importance of distinguishing:
+
+```text
+CAP failure
+OAuth failure
+Transport/API failure
+Provider business/application response
+Test-data error
+```
+
+rather than treating every upstream error as a connectivity problem.
+
+---
+
+## 11. Core-Banking Integration Direction
+
+Fiserv Banking Hub / Finxact is the external core-banking integration target for NHBCAP01.
+
+The previous Temenos learning integration has been retired from the active CAP implementation.
+
+The obsolete Temenos external CDS service, exposed entities, connection code, and READ handlers have been removed.
+
+The active direction is:
+
+```text
+┌─────────────────────────────────┐
+│ Fiserv Banking Hub / Finxact    │
+│ Core banking and account data   │
+└───────────────┬─────────────────┘
+                │ REST / JSON
+                │ OAuth 2.0
+                ▼
+┌─────────────────────────────────┐
+│ NHB CAP                         │
+│ Integration / product layer     │
+└───────────────┬─────────────────┘
+                │
+                │ NHB contracts
+                ▼
+┌─────────────────────────────────┐
+│ NHB Consumers / SAP Integration │
+└─────────────────────────────────┘
+```
+
+NHB CAP owns the integration boundary.
+
+Fiserv / Finxact owns external account-processing capabilities.
+
+NHB consumers depend on NHB service contracts rather than directly on the provider's API structures.
+
+---
+
+## 12. Current Technical Status
+
+The following milestones are complete:
+
+- Fiserv developer/API access established
+- Banking Hub certification environment available
+- OAuth Client Credentials tested
+- Official Postman collection tested
+- Finxact Get Account Details tested successfully
+- CAP Fiserv OAuth module implemented
+- CAP Fiserv account client implemented
+- `getFiservAccountDetails(accountId)` exposed
+- Fiserv response mapped into NHB CDS contract
+- Local CAP runtime validated
+- Fiserv runtime configuration validated
+- End-to-end CAP → Fiserv → Finxact call returned HTTP 200
+- Legacy Temenos runtime integration removed
+- CDS model compiled successfully after cleanup
+
+The current verified integration baseline is therefore:
+
+```text
+NHB CAP
+   ↓
+OAuth 2.0 Client Credentials
+   ↓
+Fiserv Banking Hub
+   ↓
+Finxact
+   ↓
+Get Account Details
+   ↓
+NHB Response Mapping
+   ↓
+HTTP 200
+```
+
+---
+
+## 13. Next Milestone
+
+The next milestone is to reproduce the locally verified integration from the deployed SAP BTP Cloud Foundry application.
+
+The target proof is:
+
+```text
+External Consumer
+       │
+       ▼
+SAP BTP Cloud Foundry
+       │
+       ▼
+NHBCAP01-srv
+       │
+       │ XSUAA-protected CAP endpoint
+       ▼
+CAP Fiserv Integration
+       │
+       ▼
+Fiserv OAuth
+       │
+       ▼
+Fiserv Banking Hub / Finxact
+       │
+       ▼
+NHB Response
+```
+
+This will validate both integration boundaries:
+
+1. **Consumer → NHBCAP01:** protected by SAP BTP XSUAA.
+2. **NHBCAP01 → Fiserv:** protected by Fiserv OAuth 2.0 Client Credentials.
+
+After the deployed proof is successful, the result should be recorded as the Cloud Foundry integration baseline before expanding to additional Fiserv APIs.
+
+---
+
+## 14. Architectural Principle
+
+The key learning from this integration is not merely how to call a banking API.
+
+The architectural principle is:
+
+> **NHB owns its business-facing service contract and integration boundary; the external banking provider owns its provider-specific API contract and processing capabilities.**
+
+CAP therefore performs the role of integration and orchestration rather than simply exposing the external core-banking API unchanged.
+
+No API keys, API secrets, OAuth access tokens, or other credentials are stored in this documentation.
