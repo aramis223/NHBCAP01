@@ -476,41 +476,88 @@ HTTP 200
 
 ## 13. Next Milestone
 
-The next milestone is to reproduce the locally verified integration from the deployed SAP BTP Cloud Foundry application.
+The deployed Cloud Foundry integration proof is complete and is now part of the stable NHBCAP01 baseline.
 
-The target proof is:
+The next milestone is **Fiserv Accountholder integration**, beginning with the Finxact Party Service while preserving `NHBCustomer` as the NHB-facing abstraction.
+
+### 13.1 Get Party List
+
+**Endpoint**
+
+`POST /partyservice/parties/parties/secured/list`
+
+**Purpose**
+
+- Search for parties using supported selection criteria.
+- Retrieve matching `PartyId` values.
+- Retrieve frequently used person or organization information.
+- Support the NHB customer collection/search scenario.
+
+The response contains `PartyListRec[]`, with separate person and organization structures.
+
+### 13.2 Get Party
+
+**Endpoint**
+
+`POST /partyservice/parties/parties/secured`
+
+**Purpose**
+
+- Retrieve a specific party when its `PartyId` is known.
+- Retrieve the richer Party record for detailed customer access.
+- Support the NHB single-customer retrieval scenario.
+
+### 13.3 NHB Abstraction
+
+NHB consumers continue to use the NHB-owned `NHBCustomer` contract rather than provider-specific Finxact Party structures.
+
+The initial transformation target is:
 
 ```text
-External Consumer
+Finxact Party                         NHBCustomer
+-------------                         -----------
+PartyKeys.PartyId              ->     CustomerNumber
+PersonName.FullName            ->     Name (person)
+OrgName.Name                   ->     Name (organization)
+Person/organization structure  ->     CustomerType
+```
+
+The mapping of `PartyId` to `CustomerNumber` is an initial integration mapping and is not yet considered a permanent business identifier decision. Finxact also exposes `MemberNum`, so the identifier strategy will be revisited after testing against actual certification data.
+
+For the first implementation proof, filtering such as:
+
+```text
+$filter=CustomerType eq 'Corporate'
+```
+
+will not yet be translated to Finxact `PersonIndicator`. In the Get Party List contract, `PersonIndicator=false` does not mean organization-only; it allows all party types.
+
+The first implementation target is:
+
+```text
+NHBCustomer READ
        │
-       ▼
-SAP BTP Cloud Foundry
-       │
-       ▼
-NHBCAP01-srv
-       │
-       │ XSUAA-protected CAP endpoint
        ▼
 CAP Fiserv Integration
        │
        ▼
-Fiserv OAuth
+Get Party List
        │
        ▼
-Fiserv Banking Hub / Finxact
+PartyListRec[]
        │
        ▼
-NHB Response
+NHB transformation
+       │
+       ▼
+NHBCustomer[]
 ```
 
-This will validate both integration boundaries:
+The first collection READ was successfully verified against the Fiserv certification environment. The end-to-end flow returned HTTP 200 and successfully transformed Finxact `PartyListRec[]` records into the NHB-owned `NHBCustomer[]` contract for both individual and corporate parties.
 
-1. **Consumer → NHBCAP01:** protected by SAP BTP XSUAA.
-2. **NHBCAP01 → Fiserv:** protected by Fiserv OAuth 2.0 Client Credentials.
+The certification test also identified at least one returned organization record without a mapped `PartyKeys.PartyId`. This will be investigated before the NHB customer identifier strategy is finalized.
 
-After the deployed proof is successful, the result should be recorded as the Cloud Foundry integration baseline before expanding to additional Fiserv APIs.
-
----
+The next implementation step is single-customer retrieval through Get Party. Additional query and filter behavior will be implemented incrementally after that.
 
 ## 14. Architectural Principle
 
