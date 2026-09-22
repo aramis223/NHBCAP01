@@ -54,6 +54,66 @@ async function getPartyList(orgId) {
     return data;
 }
 
+async function getParty(partyId, orgId) {
+    const baseUrl = process.env.FISERV_API_BASE_URL;
+
+    if (!baseUrl) {
+        throw new Error("FISERV_API_BASE_URL is not configured");
+    }
+
+    if (!partyId) {
+        throw new Error("Fiserv partyId is required");
+    }
+
+    if (!orgId) {
+        throw new Error("Fiserv orgId is required");
+    }
+
+    const accessToken = await getAccessToken();
+
+    const response = await fetch(
+        `${baseUrl}/partyservice/parties/parties/secured`,
+        {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                EFXHeader: JSON.stringify({
+                    OrganizationId: orgId,
+                    TrnId: crypto.randomUUID()
+                })
+            },
+            body: JSON.stringify({
+                PartySel: {
+                    PartyKeys: {
+                        PartyId: partyId
+                    }
+                }
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+
+        throw new Error(
+            `Fiserv Get Party failed: HTTP ${response.status} ${errorText}`
+        );
+    }
+
+    const data = await response.json();
+
+    if (!data.Status || data.Status.StatusCode !== "0") {
+        throw new Error(
+            `Fiserv Get Party returned ${
+                data.Status?.StatusCode || "Unknown"
+            }: ${data.Status?.StatusDesc || "Unknown error"}`
+        );
+    }
+    return data;
+}
 module.exports = {
-    getPartyList
+    getPartyList,
+    getParty
 };

@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const cds = require('@sap/cds');
-const { getPartyList } = require('./fiserv/parties');
+const { getPartyList, getParty } = require('./fiserv/parties');
 const { getAccountDetails } = require('./fiserv/accounts');
 
 const CONTRACT_STATUSES = new Set([
@@ -416,7 +416,37 @@ module.exports = cds.service.impl(async function () {
     });
 
     this.on('READ', 'NHBCustomer', async req => {
-    try {
+        const customerNumber = req.data?.CustomerNumber;
+
+            if (customerNumber) {
+                try {
+                    const data = await getParty(
+                    customerNumber,
+                    process.env.FISERV_ORG_ID
+            );
+
+            const party = data.PartyRec;
+            const personInfo = party.PersonPartyInfo;
+                const orgInfo = party.OrgPartyInfo;
+
+            return {
+    CustomerNumber: party.PartyKeys?.PartyId,
+    Name: personInfo?.PersonData?.PersonName?.[0]?.FullName
+        || orgInfo?.OrgData?.OrgName?.[0]?.Name
+        || null,
+    CustomerType: personInfo
+        ? 'Individual'
+        : orgInfo
+            ? 'Corporate'
+            : null
+};
+        } catch (error) {
+        console.error('Fiserv Get Party request failed:', error);
+        return req.reject(502, 'Fiserv service is currently unavailable.');
+    }
+}
+
+        try {
         const data = await getPartyList(
             process.env.FISERV_ORG_ID
         );

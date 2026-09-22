@@ -522,7 +522,7 @@ OrgName.Name                   ->     Name (organization)
 Person/organization structure  ->     CustomerType
 ```
 
-The mapping of `PartyId` to `CustomerNumber` is an initial integration mapping and is not yet considered a permanent business identifier decision. Finxact also exposes `MemberNum`, so the identifier strategy will be revisited after testing against actual certification data.
+The mapping of `PartyId` to `CustomerNumber` remains an initial integration mapping and is not yet considered a permanent business identifier decision. Certification testing confirmed that Finxact exposes `PartyId` and `MemberNum` as distinct identifiers. For example, the tested individual party returned `PartyId` `2|98314` and `MemberNum` `98314`. The NHB customer identifier strategy will therefore remain an explicit architecture decision rather than being inferred from the provider contract.
 
 For the first implementation proof, filtering such as:
 
@@ -530,9 +530,9 @@ For the first implementation proof, filtering such as:
 $filter=CustomerType eq 'Corporate'
 ```
 
-will not yet be translated to Finxact `PersonIndicator`. In the Get Party List contract, `PersonIndicator=false` does not mean organization-only; it allows all party types.
+is not yet translated to Finxact `PersonIndicator`. In the Get Party List contract, `PersonIndicator=false` does not mean organization-only; it allows all party types.
 
-The first implementation target is:
+The collection retrieval flow is:
 
 ```text
 NHBCustomer READ
@@ -553,11 +553,41 @@ NHB transformation
 NHBCustomer[]
 ```
 
-The first collection READ was successfully verified against the Fiserv certification environment. The end-to-end flow returned HTTP 200 and successfully transformed Finxact `PartyListRec[]` records into the NHB-owned `NHBCustomer[]` contract for both individual and corporate parties.
+The collection READ was successfully verified against the Fiserv certification environment. The end-to-end flow returned HTTP 200 and successfully transformed Finxact `PartyListRec[]` records into the NHB-owned `NHBCustomer[]` contract for both individual and corporate parties.
 
-The certification test also identified at least one returned organization record without a mapped `PartyKeys.PartyId`. This will be investigated before the NHB customer identifier strategy is finalized.
+The certification test also identified at least one returned organization record without a mapped `PartyKeys.PartyId`. This remains an open investigation item before the NHB customer identifier strategy is finalized.
 
-The next implementation step is single-customer retrieval through Get Party. Additional query and filter behavior will be implemented incrementally after that.
+Single-customer retrieval through Finxact Get Party has also been implemented and verified against the certification environment.
+
+The single-customer retrieval flow is:
+
+```text
+NHBCustomer('<CustomerNumber>')
+       │
+       ▼
+CAP Fiserv Integration
+       │
+       ▼
+Get Party
+       │
+       ▼
+PartyRec
+       │
+       ▼
+NHB transformation
+       │
+       ▼
+NHBCustomer
+```
+
+Both principal party structures were verified:
+
+- `PersonPartyInfo.PersonData.PersonName[0].FullName` is transformed to the NHB customer `Name`, with `CustomerType` normalized to `Individual`.
+- `OrgPartyInfo.OrgData.OrgName[0].Name` is transformed to the NHB customer `Name`, with `CustomerType` normalized to `Corporate`.
+
+Certification tests returned HTTP 200 for both an individual customer (`Maria Alvarez`) and a corporate customer (`Boyer Group`).
+
+The next incremental work is query/filter behavior and investigation of the customer identifier strategy, including the observed Party List record without a mapped `PartyKeys.PartyId`.
 
 ## 14. Architectural Principle
 
