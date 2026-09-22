@@ -524,13 +524,22 @@ Person/organization structure  ->     CustomerType
 
 The mapping of `PartyId` to `CustomerNumber` remains an initial integration mapping and is not yet considered a permanent business identifier decision. Certification testing confirmed that Finxact exposes `PartyId` and `MemberNum` as distinct identifiers. For example, the tested individual party returned `PartyId` `2|98314` and `MemberNum` `98314`. The NHB customer identifier strategy will therefore remain an explicit architecture decision rather than being inferred from the provider contract.
 
-For the first implementation proof, filtering such as:
+For NHB collection reads, `CustomerType` equality filtering is implemented at the NHB CAP boundary rather than being translated directly to Finxact `PersonIndicator`.
 
-```text
+For example:
+
 $filter=CustomerType eq 'Corporate'
-```
 
-is not yet translated to Finxact `PersonIndicator`. In the Get Party List contract, `PersonIndicator=false` does not mean organization-only; it allows all party types.
+CAP retrieves the Party List, transforms the provider records into the NHB-owned `NHBCustomer` representation, and then applies the `CustomerType` filter to the normalized NHB result.
+
+This design is intentional because the Finxact Get Party List contract does not provide equivalent organization-only semantics: `PersonIndicator=false` allows all party types rather than meaning corporate/organization only.
+
+Certification testing verified both supported equality cases:
+
+- `CustomerType eq 'Corporate'` returned only `Corporate` customers.
+- `CustomerType eq 'Individual'` returned only `Individual` customers.
+
+An unfiltered collection READ was also regression-tested successfully and continued to return both individual and corporate customers.
 
 The collection retrieval flow is:
 
@@ -587,7 +596,11 @@ Both principal party structures were verified:
 
 Certification tests returned HTTP 200 for both an individual customer (`Maria Alvarez`) and a corporate customer (`Boyer Group`).
 
-The next incremental work is query/filter behavior and investigation of the customer identifier strategy, including the observed Party List record without a mapped `PartyKeys.PartyId`.
+The current identifier decision is to retain the existing `PartyId` → `CustomerNumber` mapping as a provisional integration mapping for this milestone. `PartyId` and `MemberNum` remain semantically distinct, and no unsupported `MemberNum` → `PartyId` lookup will be invented.
+
+Review of the Party Account Relationship service confirmed a supported navigation from `AcctId` to related `PartyId` values and relationship roles, but it does not provide a general `MemberNum` → `PartyId` lookup. The organization Party List record without a mapped `PartyKeys.PartyId` therefore remains an open investigation item.
+
+With collection retrieval, keyed Get Party retrieval, and `CustomerType` equality filtering now locally verified, the next milestone is final Accountholder stabilization followed by promotion of the verified integration to SAP BTP Cloud Foundry.
 
 ## 14. Architectural Principle
 

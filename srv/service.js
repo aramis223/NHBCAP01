@@ -417,7 +417,6 @@ module.exports = cds.service.impl(async function () {
 
     this.on('READ', 'NHBCustomer', async req => {
         const customerNumber = req.data?.CustomerNumber;
-
             if (customerNumber) {
                 try {
                     const data = await getParty(
@@ -452,8 +451,15 @@ module.exports = cds.service.impl(async function () {
         );
 
         const parties = data.PartyListRec || [];
+        const where = req.query.SELECT?.where;
+        const customerTypeFilter =
+            where?.[0]?.ref?.[0] === 'CustomerType' &&
+            where?.[1] === '='
+                ? where?.[2]?.val
+                : null;
 
-        return parties.map(party => {
+            return parties
+                .map(party => {
             const personInfo = party.PersonPartyListInfo;
             const orgInfo = party.OrgPartyListInfo;
 
@@ -468,7 +474,11 @@ module.exports = cds.service.impl(async function () {
                         ? 'Corporate'
                         : null
             };
-        });
+                })
+            .filter(customer =>
+                !customerTypeFilter ||
+                customer.CustomerType === customerTypeFilter
+        );
     } catch (error) {
         console.error('Fiserv party list request failed:', error);
         return req.reject(502, 'Fiserv service is currently unavailable.');

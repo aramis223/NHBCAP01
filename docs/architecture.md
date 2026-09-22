@@ -1,5 +1,4 @@
 # NHBCAP01 — Architecture
-
 ## 1. Purpose
 
 NHBCAP01 is the application and integration layer for the NHB banking architecture learning environment.
@@ -18,7 +17,6 @@ The project currently validates two primary integration capabilities:
 The architecture also provides the foundation for future integration with SAP S/4HANA and additional NHB capability domains.
 
 ---
-
 ## 2. Architecture Principles
 
 ### 2.1 NHB owns the business-facing contract
@@ -1305,23 +1303,16 @@ The implementation should not manufacture a PartyId or silently substitute anoth
 NHB OData query semantics must not be translated mechanically into superficially similar Finxact fields.
 
 For example:
-
 ```text
 $filter=CustomerType eq 'Corporate'
 ```
+This filter must not be translated to `PersonIndicator=false`, because the inspected Get Party List contract establishes that `PersonIndicator=false` allows all party types rather than meaning organization-only.
 
-must not currently be translated into:
+For the currently supported `CustomerType` equality filter, NHBCAP01 preserves NHB semantics at the CAP boundary. CAP retrieves the Finxact Party List, transforms the provider records into the NHB-owned `NHBCustomer` representation, and then applies the `CustomerType` filter to the normalized result.
 
-```text
-PersonIndicator = false
-```
+This behavior has been locally verified for both `CustomerType eq 'Corporate'` and `CustomerType eq 'Individual'`. An unfiltered collection READ and keyed Get Party retrieval were also regression-tested successfully.
 
-because the inspected Get Party List contract establishes that `PersonIndicator=false` allows all party types rather than meaning organization-only.
-
-The initial implementation therefore leaves customer-type filter translation unresolved rather than introducing an incorrect provider mapping.
-
-Potential query/filter handling must preserve NHB semantics independently of provider-specific selection semantics.
-
+The implementation is intentionally limited to this verified simple `CustomerType` equality case and should not be interpreted as generic OData filter translation.
 ### 8.9 Current verification status
 
 The current Accountholder status is:
@@ -2147,7 +2138,6 @@ The following decisions define the current NHBCAP01 architecture.
 | SAP integration should use supported APIs/services | Avoids direct database coupling |
 
 ---
-
 ## 14. Known Limitations and Open Architecture Items
 
 NHBCAP01 remains a learning, architecture, and portfolio implementation rather than a production banking platform.
@@ -2174,7 +2164,6 @@ Current limitations and open items include:
 These items are recorded explicitly so that verified implementation, temporary integration mappings, and future architecture remain distinguishable.
 
 ---
-
 ## 15. Next Architecture Steps
 
 The next architecture work should continue incrementally from the verified baseline.
