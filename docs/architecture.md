@@ -253,7 +253,7 @@ NHBCAP01-srv
 
 The deployed Account Details integration has been verified end to end with HTTP 200.
 
-The Accountholder integration is currently verified locally and should be promoted to the Cloud Foundry baseline only after its current query and identifier considerations are resolved.
+The Accountholder integration has now been verified locally and through SAP BTP Cloud Foundry. Query semantics beyond the currently verified equality predicates joined by `and` and the final customer identifier strategy remain open architecture concerns.
 
 ### 3.4 Frontend layer
 
@@ -1063,7 +1063,7 @@ New integrations should be introduced incrementally without destabilizing this v
 
 The second Fiserv capability introduced into NHBCAP01 is Accountholder integration through the Finxact Party Service.
 
-Unlike Account Details, which is already part of the verified Cloud Foundry baseline, the current Accountholder implementation has been verified locally against the Fiserv certification environment.
+Like Account Details, the Accountholder implementation has now been verified locally and through SAP BTP Cloud Foundry against the Fiserv certification environment.
 
 `NHBCustomer` remains the NHB-facing abstraction. NHB consumers do not interact directly with Finxact Party structures.
 
@@ -1302,17 +1302,15 @@ The implementation should not manufacture a PartyId or silently substitute anoth
 
 NHB OData query semantics must not be translated mechanically into superficially similar Finxact fields.
 
-For example:
+The currently verified `NHBCustomer` query surface is:
+
 ```text
-$filter=CustomerType eq 'Corporate'
+Unfiltered collection READ
+Keyed READ by CustomerNumber
+CustomerType eq '<value>'
+Name eq '<value>'
+Name eq '<value>' and CustomerType eq '<value>'
 ```
-This filter must not be translated to `PersonIndicator=false`, because the inspected Get Party List contract establishes that `PersonIndicator=false` allows all party types rather than meaning organization-only.
-
-For the currently supported `CustomerType` equality filter, NHBCAP01 preserves NHB semantics at the CAP boundary. CAP retrieves the Finxact Party List, transforms the provider records into the NHB-owned `NHBCustomer` representation, and then applies the `CustomerType` filter to the normalized result.
-
-This behavior has been locally verified for both `CustomerType eq 'Corporate'` and `CustomerType eq 'Individual'`. An unfiltered collection READ and keyed Get Party retrieval were also regression-tested successfully.
-
-The implementation is intentionally limited to this verified simple `CustomerType` equality case and should not be interpreted as generic OData filter translation.
 ### 8.9 Current verification status
 
 The current Accountholder status is:
@@ -1334,14 +1332,26 @@ Get Party
     └── Corporate mapping verified
 ```
 
-The Accountholder capability has not yet replaced the Account Details integration as the deployed Cloud Foundry baseline.
+The Accountholder capability has now been promoted to SAP BTP Cloud Foundry and verified end to end against the Fiserv Banking Hub certification environment.
 
-The next incremental concerns are:
+The Cloud Foundry deployment and subsequent local regression verification collectively cover:
 
-- NHBCustomer query/filter behavior
+- unfiltered `NHBCustomer` collection READ — HTTP 200
+- `CustomerType eq 'Corporate'` — HTTP 200 with Corporate records only
+- `CustomerType eq 'Individual'` — HTTP 200 with Individual records only
+- `Name eq 'Vitu Armstrong'` — HTTP 200 with two matching Party records
+- `Name eq 'Vitu Armstrong' and CustomerType eq 'Individual'` — HTTP 200 with two Individual records
+- `Name eq 'Vitu Armstrong' and CustomerType eq 'Corporate'` — HTTP 200 with an empty result
+- duplicate customer names with distinct Finxact `PartyId` values verified
+- keyed `NHBCustomer` retrieval using PartyId `2|98314` — HTTP 200 for Maria Alvarez
+- XSUAA-protected consumer access to the deployed CAP service
+- CAP → Fiserv OAuth → Banking Hub / Finxact Party integration
+
+The remaining incremental concerns are:
+
+- NHBCustomer query/filter semantics beyond the currently verified equality predicates joined by `and`
 - NHB customer identifier strategy
 - investigation of Party List records without `PartyId`
-- Cloud Foundry promotion after the local integration baseline is considered stable
 
 ---
 ## 9. Data and Transformation Boundaries
@@ -1766,7 +1776,7 @@ NHBCAP01-srv
              Finxact
 ```
 
-The deployed Account Details capability has completed this path successfully with HTTP 200.
+Both the deployed Account Details and Accountholder capabilities have completed this cloud integration path successfully with HTTP 200.
 
 ### 11.2 XSUAA authentication boundary
 
@@ -1925,9 +1935,9 @@ Get Account Details
        HTTP 200
 ```
 
-This is the current Cloud Foundry integration baseline.
+This Account Details flow established the initial Cloud Foundry integration baseline.
 
-The Accountholder capability remains locally verified and should be deployed only after its current query/filter and customer-identifier considerations have reached an appropriate stable checkpoint.
+The Accountholder capability has subsequently been promoted to the same SAP BTP Cloud Foundry runtime and verified end to end through the XSUAA-protected CAP service against the Fiserv Banking Hub certification environment.
 
 ---
 ## 12. Current and Target Architecture
@@ -1980,13 +1990,14 @@ The following capabilities have been verified:
 - Finxact Get Party
 - individual Party-to-NHBCustomer transformation
 - corporate Party-to-NHBCustomer transformation
-- local Accountholder end-to-end HTTP 200
+- Accountholder end-to-end HTTP 200 locally and through SAP BTP Cloud Foundry
+- deployed NHBCustomer collection READ
+- deployed Corporate and Individual `CustomerType` equality filtering
+- deployed keyed Get Party retrieval
 
-The verification levels are not identical.
+Both Account Details and Accountholder have now been verified locally and through the deployed Cloud Foundry application.
 
-Account Details has been verified locally and through the deployed Cloud Foundry application.
-
-Accountholder has been verified locally against the Fiserv certification environment but is not yet part of the verified deployed baseline.
+Account Details established the initial deployed Fiserv integration baseline. Accountholder extends that baseline while preserving `NHBCustomer` as an NHB-owned abstraction over Finxact Party structures.
 
 ### 12.2 Current responsibility boundaries
 
@@ -2131,7 +2142,7 @@ The following decisions define the current NHBCAP01 architecture.
 | `NHBCustomer` is an NHB-owned abstraction | Prevents Finxact Party structures from becoming the NHB customer contract |
 | `PartyId → CustomerNumber` is provisional | Certification testing shows `PartyId` and `MemberNum` are distinct |
 | Provider query fields are not assumed to equal NHB query semantics | Prevents incorrect mappings such as Corporate → `PersonIndicator=false` |
-| Account Details remains the stable deployed Fiserv baseline | It has been verified locally and through Cloud Foundry |
+| Account Details and Accountholder form the verified deployed Fiserv baseline | Both have been verified locally and through Cloud Foundry |
 | New integrations are validated locally before cloud promotion | Reduces risk to the stable deployed baseline |
 | Destination Service is not a current Fiserv runtime dependency | Current Fiserv connectivity uses runtime configuration directly |
 | SAP S/4HANA remains a target integration | Keeps planned SAP enterprise integration distinct from verified implementation |
@@ -2145,12 +2156,12 @@ NHBCAP01 remains a learning, architecture, and portfolio implementation rather t
 Current limitations and open items include:
 
 - Only a subset of Fiserv / Finxact capabilities has been integrated.
-- Account Details is the current deployed external-banking baseline.
-- Accountholder Get Party List and Get Party are locally verified but not yet part of the verified Cloud Foundry baseline.
+- Account Details established the initial deployed external-banking baseline; Accountholder now extends that verified baseline.
+- Accountholder Get Party List and Get Party are verified locally and through the deployed Cloud Foundry application.
 - `PartyId → CustomerNumber` remains a provisional identifier mapping.
 - The relationship between NHB customer identity, Finxact `PartyId`, and `MemberNum` requires an explicit architecture decision.
 - At least one Party List organization record was observed without a mapped `PartyKeys.PartyId`.
-- NHBCustomer query/filter behavior has not yet been finalized.
+- NHBCustomer query/filter behavior beyond the currently verified equality predicates joined by `and` has not yet been finalized.
 - `CustomerType = Corporate` cannot currently be translated directly to `PersonIndicator=false`.
 - Provider error mapping can be refined into more granular NHB error semantics.
 - Production resilience patterns such as retries, circuit breakers, timeout policy, and recovery behavior have not yet been fully designed.
@@ -2168,43 +2179,57 @@ These items are recorded explicitly so that verified implementation, temporary i
 
 The next architecture work should continue incrementally from the verified baseline.
 
-### 15.1 Complete the Accountholder local baseline
+### 15.1 Accountholder baseline — completed
 
-The immediate work is:
+The initial Accountholder baseline is implemented and verified locally and through SAP BTP Cloud Foundry.
+
+The verified scope includes:
+
+- Get Party List
+- Get Party
+- Individual and Corporate Party-to-NHBCustomer transformation
+- unfiltered `NHBCustomer` collection retrieval
+- `CustomerType eq 'Corporate'`
+- `CustomerType eq 'Individual'`
+- `Name eq '<value>'`
+- `Name eq '<value>' and CustomerType eq '<value>'`
+- keyed `NHBCustomer` retrieval
+
+The following architecture questions remain open:
+
+- NHBCustomer query/filter semantics beyond the currently verified equality predicates joined by `and`
+- final NHB customer identifier strategy
+- investigation of Party List records without `PartyId`
+
+These open questions must not be resolved by inventing unverified provider semantics.
+
+### 15.2 Accountholder Cloud Foundry promotion — completed
+
+The Accountholder capability has been promoted successfully from the local BAS baseline to SAP BTP Cloud Foundry.
+
+The verified deployed path is:
 
 ```text
-NHBCustomer
-     │
-     ├── Query/filter behavior
-     │
-     ├── Customer identifier strategy
-     │
-     └── Missing PartyId investigation
+XSUAA-authenticated consumer
+        │
+        ▼
+NHBCAP01-srv
+        │
+        ▼
+Fiserv OAuth
+        │
+        ▼
+Fiserv Banking Hub
+        │
+        ▼
+Finxact Accountholder
+        │
+        ▼
+NHB transformation
+        │
+        ▼
+HTTP 200
 ```
-
-The goal is to stabilize the NHB customer abstraction without introducing provider semantics that have not been verified.
-
-### 15.2 Promote Accountholder to Cloud Foundry
-
-After the local Accountholder behavior is stable:
-
-```text
-Local verified capability
-        │
-        ▼
-Cloud Foundry deployment
-        │
-        ▼
-XSUAA-authenticated test
-        │
-        ▼
-Fiserv certification call
-        │
-        ▼
-NHB response verification
-```
-
-The existing deployed Account Details integration should remain intact during this promotion.
 
 ### 15.3 Expand Fiserv capabilities selectively
 
@@ -2287,13 +2312,13 @@ SAP CAP
   ┌───┴───────────────┐
   │                   │
   ▼                   ▼
-NHB Persistence   External Integration
-  │                   │
-  ▼                   ▼
-SQLite / HANA     Fiserv Banking Hub
-                      │
-                      ▼
-                   Finxact
+NHB Persistence        External Integration
+      │                         │
+      ▼                         ▼
+SQLite / HANA           Fiserv Banking Hub
+                                │
+                                ▼
+                             Finxact
 ```
 
 The current verified external integration baseline consists of:
@@ -2308,9 +2333,9 @@ The current verified external integration baseline consists of:
 - Finxact Get Party
 - NHBCustomer transformation for individual and corporate parties
 
-Account Details is the stable deployed baseline.
+Account Details established the initial stable deployed Fiserv baseline.
 
-Accountholder integration is the current locally verified extension and preserves `NHBCustomer` as an NHB-owned abstraction over Finxact Party structures.
+Accountholder integration is now a verified deployed extension of that baseline and preserves `NHBCustomer` as an NHB-owned abstraction over Finxact Party structures.
 
 The architecture intentionally keeps provider contracts behind the CAP boundary:
 
@@ -2324,7 +2349,7 @@ CAP Orchestration and Mapping
 Provider Contract
 ```
 
-The principal open architecture concerns are customer identifier strategy, NHBCustomer query semantics, the observed Party List record without `PartyId`, and eventual Cloud Foundry promotion of the Accountholder capability.
+The principal open architecture concerns are the final NHB customer identifier strategy, NHBCustomer query semantics beyond the currently verified equality predicates joined by `and`, and the observed Party List record without `PartyId`.
 
 SAP S/4HANA remains part of the target architecture and will be introduced through supported SAP APIs when a concrete NHB integration use case is selected.
 

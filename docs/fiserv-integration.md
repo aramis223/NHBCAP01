@@ -474,11 +474,11 @@ HTTP 200
 
 ---
 
-## 13. Next Milestone
+## 13. Accountholder Integration
 
-The deployed Cloud Foundry integration proof is complete and is now part of the stable NHBCAP01 baseline.
+The deployed Account Details integration established the initial stable NHBCAP01 Cloud Foundry baseline.
 
-The next milestone is **Fiserv Accountholder integration**, beginning with the Finxact Party Service while preserving `NHBCustomer` as the NHB-facing abstraction.
+Fiserv Accountholder integration was subsequently implemented through the Finxact Party Service while preserving `NHBCustomer` as the NHB-facing abstraction. The capability has been verified locally and through SAP BTP Cloud Foundry.
 
 ### 13.1 Get Party List
 
@@ -568,6 +568,26 @@ The certification test also identified at least one returned organization record
 
 Single-customer retrieval through Finxact Get Party has also been implemented and verified against the certification environment.
 
+During subsequent local regression testing, the Get Party endpoint temporarily returned HTTP 400 with Fiserv status `ESF2001` (`INTERNAL_SERVER_ERROR`). No CAP implementation change was made.
+
+The same request was then revalidated at three levels:
+
+1. direct HTTP request to the Fiserv Get Party endpoint;
+2. the NHBCAP01 `getParty()` integration helper; and
+3. the NHB-facing keyed CAP endpoint `NHBCustomer('2|98314')`.
+
+All three subsequently returned HTTP 200 successfully. The CAP endpoint returned:
+
+```json
+{
+  "CustomerNumber": "2|98314",
+  "Name": "Maria Alvarez",
+  "CustomerType": "Individual"
+}
+```
+
+This regression test confirmed that the request contract, CAP integration helper, and NHB transformation remained valid. The `ESF2001` response has been observed intermittently for this PartyId in the Fiserv certification environment. Current evidence does not indicate a CAP request-contract defect, but the provider-side cause has not been established and should therefore not be characterized more specifically without further evidence.
+
 The single-customer retrieval flow is:
 
 ```text
@@ -600,7 +620,129 @@ The current identifier decision is to retain the existing `PartyId` → `Custome
 
 Review of the Party Account Relationship service confirmed a supported navigation from `AcctId` to related `PartyId` values and relationship roles, but it does not provide a general `MemberNum` → `PartyId` lookup. The organization Party List record without a mapped `PartyKeys.PartyId` therefore remains an open investigation item.
 
-With collection retrieval, keyed Get Party retrieval, and `CustomerType` equality filtering now locally verified, the next milestone is final Accountholder stabilization followed by promotion of the verified integration to SAP BTP Cloud Foundry.
+### Relationship API verification
+
+Additional Finxact Accountholder relationship APIs were tested successfully in the certification environment.
+
+**Party Account Relationship — by account**
+
+Using account `110000000055` with account type `DDA`, Finxact returned multiple related parties together with their `PartyId`, relationship role, ownership indicators, access-rights indicators, and party summary information.
+
+This verifies the supported navigation:
+
+```text
+AcctId + AcctType
+        │
+        ▼
+Party Account Relationship
+        │
+        ▼
+PartyId(s)
+```
+
+**Party Account Relationship — by party**
+
+A party-centric relationship lookup was also verified successfully. Given a known `PartyId`, Finxact returned the related account together with account type, relationship role, account status, product identifier, and account summary information.
+
+This verifies the reverse navigation:
+
+```text
+PartyId
+   │
+   ▼
+Party Account Relationship
+   │
+   ▼
+AcctId(s)
+```
+
+**Party Port Relationship**
+
+Party portfolio relationships were also verified successfully. A known `PartyId` returned multiple `PortId` values together with relationship semantics including ownership type, primary-owner indicator, tax-reporting-owner indicator, access rights, account title, and FDIC ownership classification.
+
+This verifies the supported navigation:
+
+```text
+PartyId
+   │
+   ▼
+Party Port Relationship
+   │
+   ▼
+PortId(s)
+```
+
+These relationship services establish supported Finxact navigation between parties, accounts, and portfolios. They do not, however, provide a general replacement for a missing `PartyId`. The previously observed `Acme` Party List record still exposes neither `PartyId` nor `AcctId`, so no unsupported identifier derivation or lookup will be introduced for that record.
+
+With collection retrieval, keyed Get Party retrieval, and `CustomerType` equality filtering now verified locally and in SAP BTP Cloud Foundry, the Accountholder integration is considered a deployed extension of the established Account Details baseline.
+
+The remaining Accountholder concerns are customer identifier strategy, broader NHBCustomer query semantics, and investigation of the observed Party List record without `PartyId`.
+
+Broader `NHBCustomer` query semantics were extended and regression-tested.
+
+The NHB CAP boundary now supports:
+
+```text
+Unfiltered collection READ
+Keyed READ by CustomerNumber
+CustomerType eq '<value>'
+Name eq '<value>'
+Name eq '<value>' and CustomerType eq '<value>'
+```
+
+`Name` equality is translated to the supported Finxact Get Party List `Name` selection criterion.
+
+`CustomerType` remains an NHB-side normalized filter and is not translated directly to Finxact `PersonIndicator`, because certification testing previously confirmed that `PersonIndicator=false` is not equivalent to organization-only semantics.
+
+```markdown
+Compound equality predicates joined by `and` are evaluated across the supported NHB fields. Regression testing confirmed both positive and contradictory cases:
+
+```text
+Name eq 'Vitu Armstrong' and CustomerType eq 'Individual'
+→ 2 matching NHBCustomer records
+
+Name eq 'Vitu Armstrong' and CustomerType eq 'Corporate'
+→ empty result
+```
+
+The current query implementation is intentionally limited to supported equality predicates joined by `and`. It does not claim general support for arbitrary OData expressions such as `or`, `contains`, `startswith`, nested expressions, or unsupported operators.
+
+Unsupported query semantics will not be translated mechanically into superficially similar Finxact selection fields.
+
+### Customer identifier strategy
+
+The current `NHBCustomer` contract uses `CustomerNumber` as its key, with Finxact `PartyId` mapped provisionally to `CustomerNumber`.
+
+This mapping is retained for the current milestone because it is verified and operational, but it is not considered the permanent NHB customer identity model.
+
+The verified Finxact data shows that `PartyId` and `MemberNum` are distinct provider identifiers and must not be treated as interchangeable. NHB must also not derive or manufacture a `PartyId` from `MemberNum`, tax identifiers, names, account identifiers, or other provider data.
+
+The target identifier model is:
+
+```text
+NHB Customer
+├── CustomerId        ← NHB-owned technical identifier
+├── CustomerNumber    ← NHB business identifier, when defined
+├── ExternalPartyId   ← Finxact PartyId
+└── ExternalMemberNum ← Finxact MemberNum
+```
+
+An NHB-owned UUID is the preferred future technical identifier for `CustomerId`.
+
+The migration to an NHB-owned customer identifier will be handled as an explicit service-contract evolution rather than introduced into the current verified Accountholder baseline.
+
+For the current integration, Party List records without `PartyKeys.PartyId` are excluded from the keyed `NHBCustomer` collection. No substitute identifier is manufactured. Such records are logged as provider-data exceptions for investigation.
+
+The observed organization record `Acme` is an example of this behavior: it contains organization and tax information but no `PartyId`, `MemberNum`, or account identifier that would support a legitimate keyed NHB customer mapping.
+
+The verified relationship APIs provide supported navigation where appropriate:
+
+```text
+AcctId   → PartyId
+PartyId  → AcctId
+PartyId  → PortId
+```
+These relationships do not provide a general substitute for a missing `PartyId`.
 
 ## 14. Architectural Principle
 
