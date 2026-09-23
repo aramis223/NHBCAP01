@@ -231,6 +231,329 @@ module.exports = cds.service.impl(async function () {
         }
     });
 
+    this.on('recordCreditDecision', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            decisionStatus,
+            decisionDate,
+            decisionReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!decisionStatus || !CREDIT_DECISION_STATUSES.has(decisionStatus)) {
+            return req.reject(400, 'A valid credit decision status is required.');
+        }
+
+        if (!decisionDate || !decisionReference?.trim()) {
+            return req.reject(400, 'Credit decision date and reference are required.');
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'DRAFT') {
+            return req.reject(
+                409,
+                'Credit decision can only be recorded while the financing is in DRAFT status.'
+            );
+        }
+
+        const newStatus = decisionStatus === 'APPROVED'
+            ? 'CREDIT_APPROVED'
+            : 'DRAFT';
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    creditDecisionStatus: decisionStatus,
+                    creditDecisionDate: decisionDate,
+                    creditDecisionReference: decisionReference.trim(),
+                    status: newStatus
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('recordShariaDecision', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            approvalStatus,
+            approvalDate,
+            approvalReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!approvalStatus || !SHARIA_APPROVAL_STATUSES.has(approvalStatus)) {
+            return req.reject(400, 'A valid Sharia approval status is required.');
+        }
+
+        if (!approvalDate || !approvalReference?.trim()) {
+            return req.reject(400, 'Sharia approval date and reference are required.');
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'CREDIT_APPROVED') {
+            return req.reject(
+                409,
+                'Sharia decision can only be recorded after credit approval.'
+            );
+        }
+
+        const newStatus = approvalStatus === 'APPROVED'
+            ? 'SHARIA_APPROVED'
+            : 'CREDIT_APPROVED';
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    shariaApprovalStatus: approvalStatus,
+                    shariaApprovalDate: approvalDate,
+                    shariaApprovalReference: approvalReference.trim(),
+                    status: newStatus
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('recordAssetAcquisition', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            acquisitionDate,
+            evidenceReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!acquisitionDate || !evidenceReference?.trim()) {
+            return req.reject(
+                400,
+                'Asset acquisition date and ownership evidence reference are required.'
+            );
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'SHARIA_APPROVED') {
+            return req.reject(
+                409,
+                'Asset acquisition can only be recorded after Sharia approval.'
+            );
+        }
+
+        if (financing.creditDecisionStatus !== 'APPROVED') {
+            return req.reject(
+                409,
+                'Credit approval is required before asset acquisition.'
+            );
+        }
+
+        if (financing.shariaApprovalStatus !== 'APPROVED') {
+            return req.reject(
+                409,
+                'Sharia approval is required before asset acquisition.'
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    bankOwnershipRecorded: true,
+                    assetAcquisitionDate: acquisitionDate,
+                    ownershipEvidenceReference: evidenceReference.trim(),
+                    status: 'ASSET_ACQUIRED'
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('executeSaleContract', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            executionDate,
+            contractReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!executionDate || !contractReference?.trim()) {
+            return req.reject(
+                400,
+                'Sale contract execution date and reference are required.'
+            );
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'ASSET_ACQUIRED') {
+            return req.reject(
+                409,
+                'Murabaha sale contract can only be executed after asset acquisition.'
+            );
+        }
+
+        if (!financing.bankOwnershipRecorded || !financing.ownershipEvidenceReference) {
+            return req.reject(
+                409,
+                'Bank ownership evidence is required before executing the Murabaha sale contract.'
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    saleContractExecutedOn: executionDate,
+                    saleContractReference: contractReference.trim(),
+                    status: 'CONTRACT_EXECUTED'
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('confirmAssetDelivery', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            deliveryDate,
+            evidenceReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!deliveryDate || !evidenceReference?.trim()) {
+            return req.reject(
+                400,
+                'Asset delivery date and evidence reference are required.'
+            );
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'CONTRACT_EXECUTED') {
+            return req.reject(
+                409,
+                'Asset delivery can only be confirmed after execution of the Murabaha sale contract.'
+            );
+        }
+
+        if (!financing.saleContractExecutedOn || !financing.saleContractReference) {
+            return req.reject(
+                409,
+                'Executed Murabaha sale-contract evidence is required before asset delivery.'
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    assetDeliveredOn: deliveryDate,
+                    deliveryEvidenceReference: evidenceReference.trim(),
+                    status: 'DELIVERED'
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('activateFinancing', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'DELIVERED') {
+            return req.reject(
+                409,
+                'Financing can only be activated after confirmed asset delivery.'
+            );
+        }
+
+        if (!financing.assetDeliveredOn || !financing.deliveryEvidenceReference) {
+            return req.reject(
+                409,
+                'Asset delivery evidence is required before financing activation.'
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({ status: 'ACTIVE' })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
     this.before(['CREATE', 'UPDATE'], 'MurabahaInstallment', req => {
         const data = req.data;
         const principal = amount(data.principalAmount);

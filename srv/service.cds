@@ -9,7 +9,37 @@ service NHBCAP01Service {
     entity Account as projection on my.Account;
 
     @cds.redirection.target
-    entity MurabahaFinancing as projection on my.MurabahaFinancing;
+    entity MurabahaFinancing as projection on my.MurabahaFinancing actions {
+        action recordCreditDecision(
+            decisionStatus    : String(30),
+            decisionDate      : Date,
+            decisionReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action recordShariaDecision(
+            approvalStatus    : String(30),
+            approvalDate      : Date,
+            approvalReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action recordAssetAcquisition(
+            acquisitionDate   : Date,
+            evidenceReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action executeSaleContract(
+            executionDate     : Date,
+            contractReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action confirmAssetDelivery(
+            deliveryDate      : Date,
+            evidenceReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action activateFinancing()
+            returns MurabahaFinancing;
+    };
 
     entity MurabahaInstallment as projection on my.MurabahaInstallment actions {
         action postPayment(

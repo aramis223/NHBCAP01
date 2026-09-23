@@ -35,13 +35,19 @@ The prototype financing lifecycle is:
 DRAFT
   │
   ▼
-UNDER_REVIEW
+CREDIT_APPROVED
   │
   ▼
-APPROVED
+SHARIA_APPROVED
   │
   ▼
-ASSET_PURCHASED
+ASSET_ACQUIRED
+  │
+  ▼
+CONTRACT_EXECUTED
+  │
+  ▼
+DELIVERED
   │
   ▼
 ACTIVE
@@ -49,7 +55,62 @@ ACTIVE
   ▼
 SETTLED
 ```
+The primary lifecycle above reflects the current executable control model.
+
+Additional statuses such as `QUOTED`, `APPROVED`, `ASSET_PURCHASED`, and `OFFERED` remain reserved or legacy vocabulary and are not part of the primary governed transition path.
+
+`CANCELLED` and `DEFAULTED` represent exceptional lifecycle states.
+
+`SETTLED` is system-driven when all installments are fully paid and is not intended to be set manually.
+
 These statuses represent a prototype workflow only. Production product rules would require formal Sharia, legal, risk, finance, compliance, accounting, and regulatory review.
+### Governed Lifecycle Actions
+
+The Murabaha financing lifecycle is controlled through explicit bound actions on `MurabahaFinancing` rather than unrestricted status changes.
+
+The implemented lifecycle actions are:
+
+- `recordCreditDecision`
+- `recordShariaDecision`
+- `recordAssetAcquisition`
+- `executeSaleContract`
+- `confirmAssetDelivery`
+- `activateFinancing`
+
+The governed transition path is:
+
+```text
+DRAFT
+  │ recordCreditDecision(APPROVED)
+  ▼
+CREDIT_APPROVED
+  │ recordShariaDecision(APPROVED)
+  ▼
+SHARIA_APPROVED
+  │ recordAssetAcquisition
+  ▼
+ASSET_ACQUIRED
+  │ executeSaleContract
+  ▼
+CONTRACT_EXECUTED
+  │ confirmAssetDelivery
+  ▼
+DELIVERED
+  │ activateFinancing
+  ▼
+ACTIVE
+```
+
+`SETTLED` remains system-driven and is reached only when all installments are fully paid through the payment-processing logic.
+
+Negative or non-approval decisions are recorded without incorrectly advancing the financing lifecycle.
+
+The lifecycle is covered by the repeatable regression script:
+
+`test/murabaha-lifecycle.sh`
+
+The script creates an isolated synthetic financing record, executes the complete governed lifecycle, and verifies the resulting evidence fields and final `ACTIVE` status.
+
 ## Architecture Boundary
 The prototype follows these architecture principles:
 - SAP CAP owns the NHB-facing application and service boundary.
@@ -138,11 +199,11 @@ This prototype provides one traceable chain from enterprise architecture through
 
 | Business intent / control | Signavio process evidence | Sparx EA alignment | CAP implementation evidence | Verified behavior |
 | --- | --- | --- | --- | --- |
-| Assess financing request | Credit assessment and decision activities | VS-04.01 Murabaha Financing; financing-origination business process | `MurabahaFinancing.creditDecisionStatus`, `creditDecisionDate`, `creditDecisionReference` | Financing cannot advance without an approved credit decision. |
-| Confirm Sharia compliance | Sharia review and approval activities | Islamic-finance governance capability and Murabaha control requirements | `shariaApprovalStatus`, `shariaApprovalDate`, `shariaApprovalReference` | Acquisition and sale execution require recorded Sharia approval. |
-| Acquire asset and record bank ownership | **Acquire asset and record bank ownership** | VS-04.01.04 / BP-04.03 control trace | `bankOwnershipRecorded`, `assetAcquisitionDate`, `ownershipEvidenceReference` | Sale execution is rejected until bank ownership and its evidence are recorded. |
-| Execute Murabaha sale contract | **Execute Murabaha sale contract [VS-04.01.04 / BP-04.03]** | Product execution capability, application service, and business-process realization | `saleContractExecutedOn`, `saleContractReference` | Delivery or activation cannot precede the executed sale contract. |
-| Deliver asset and activate financing | Asset delivery and customer acceptance activities | Fulfilment process and servicing capability | `assetDeliveredOn`, `deliveryEvidenceReference`, financing status | `ACTIVE` or `SETTLED` status requires delivery evidence. |
+| Assess financing request | Credit assessment and decision activities | VS-04.01 Murabaha Financing; financing-origination business process | Bound action `MurabahaFinancing.recordCreditDecision`; `creditDecisionStatus`, `creditDecisionDate`, `creditDecisionReference` | Financing cannot advance without an approved credit decision. |
+| Confirm Sharia compliance | Sharia review and approval activities | Islamic-finance governance capability and Murabaha control requirements | Bound action `MurabahaFinancing.recordShariaDecision`; `shariaApprovalStatus`, `shariaApprovalDate`, `shariaApprovalReference` | Acquisition and sale execution require recorded Sharia approval. |
+| Acquire asset and record bank ownership | **Acquire asset and record bank ownership** | VS-04.01.04 / BP-04.03 control trace | Bound action `MurabahaFinancing.recordAssetAcquisition`; `bankOwnershipRecorded`, `assetAcquisitionDate`, `ownershipEvidenceReference` | Sale execution is rejected until bank ownership and its evidence are recorded. |
+| Execute Murabaha sale contract | **Execute Murabaha sale contract [VS-04.01.04 / BP-04.03]** | Product execution capability, application service, and business-process realization | Bound action `MurabahaFinancing.executeSaleContract`; `saleContractExecutedOn`, `saleContractReference` | Delivery or activation cannot precede the executed sale contract. |
+| Deliver asset and activate financing | Asset delivery and customer acceptance activities | Fulfilment process and servicing capability | Bound actions `MurabahaFinancing.confirmAssetDelivery` and `MurabahaFinancing.activateFinancing`; `assetDeliveredOn`, `deliveryEvidenceReference`, financing status | `ACTIVE` or `SETTLED` status requires delivery evidence. |
 | Collect installment payment | Payment receipt and allocation activity | Murabaha servicing / payment-processing capability; future external banking integration where justified | Bound action `MurabahaInstallment.postPayment`; `MurabahaPayment`; paid amount and installment status | USD 1,000 posted to installment 2; status changed to `PARTIALLY_PAID`. |
 | Prevent duplicate financial posting | Duplicate-payment exception path | Operational resilience and payment-integrity control | Unique `externalPaymentId` validation | Reuse of `TEST-PAY-20260920-001` was rejected without changing the balance. |
 | Prevent overpayment | Excess-payment exception path | Financial control and reconciliation requirement | Outstanding-balance validation in `service.js` | USD 11,000 against a USD 10,500 outstanding balance was rejected without data change. |
