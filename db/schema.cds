@@ -45,7 +45,13 @@ entity MurabahaFinancing : cuid, managed {
     saleContractReference      : String(100);
     assetDeliveredOn           : Date;
     deliveryEvidenceReference  : String(100);
+    cancellationDate           : Date;
+    cancellationReason         : String(500);
+    cancellationReference      : String(100);
 
+    defaultDate                : Date;
+    defaultReason              : String(500);
+    defaultReference           : String(100);
     status                     : String(30) default 'DRAFT';
     installments               : Association to many MurabahaInstallment
                                      on installments.financing = $self;

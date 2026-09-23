@@ -39,6 +39,17 @@ service NHBCAP01Service {
 
         action activateFinancing()
             returns MurabahaFinancing;
+        action cancelFinancing(
+            cancellationDate      : Date,
+            cancellationReason    : String(500),
+            cancellationReference : String(100)
+        ) returns MurabahaFinancing;
+
+        action markFinancingDefaulted(
+            defaultDate      : Date,
+            defaultReason    : String(500),
+            defaultReference : String(100)
+        ) returns MurabahaFinancing;
     };
 
     entity MurabahaInstallment as projection on my.MurabahaInstallment actions {

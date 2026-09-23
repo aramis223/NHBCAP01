@@ -155,6 +155,24 @@ module.exports = cds.service.impl(async function () {
             ? await db.run(SELECT.one.from(MurabahaFinancing).where({ ID: financingId }))
             : {};
         const state = { ...current, ...data };
+        if (req.event === 'CREATE' && data.status && data.status !== 'DRAFT') {
+            return req.reject(
+                409,
+                'New Murabaha financing must start in DRAFT status.'
+            );
+        }
+
+        if (
+            req.event === 'UPDATE' &&
+            data.status &&
+            current?.status &&
+            data.status !== current.status
+        ) {
+            return req.reject(
+                409,
+                'Murabaha lifecycle status cannot be changed directly; use the governed lifecycle actions.'
+            );
+        }
         const assetCost = amount(data.assetCost);
         const profitAmount = amount(data.profitAmount);
         const salePrice = amount(data.salePrice);
@@ -546,6 +564,119 @@ module.exports = cds.service.impl(async function () {
         await db.run(
             UPDATE(FinancingDB)
                 .set({ status: 'ACTIVE' })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('cancelFinancing', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            cancellationDate,
+            cancellationReason,
+            cancellationReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (
+            !cancellationDate ||
+            !cancellationReason?.trim() ||
+            !cancellationReference?.trim()
+        ) {
+            return req.reject(
+                400,
+                'Cancellation date, reason, and reference are required.'
+            );
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        const cancellableStatuses = new Set([
+            'DRAFT',
+            'CREDIT_APPROVED',
+            'SHARIA_APPROVED',
+            'ASSET_ACQUIRED',
+            'CONTRACT_EXECUTED',
+            'DELIVERED'
+        ]);
+
+        if (!cancellableStatuses.has(financing.status)) {
+            return req.reject(
+                409,
+                `Financing cannot be cancelled from status ${financing.status}.`
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    cancellationDate,
+                    cancellationReason: cancellationReason.trim(),
+                    cancellationReference: cancellationReference.trim(),
+                    status: 'CANCELLED'
+                })
+                .where({ ID: financingId })
+        );
+
+        return db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+    });
+
+    this.on('markFinancingDefaulted', 'MurabahaFinancing', async req => {
+        const financingId = req.params?.[0]?.ID;
+        const {
+            defaultDate,
+            defaultReason,
+            defaultReference
+        } = req.data;
+
+        if (!financingId) {
+            return req.reject(400, 'Murabaha financing ID is required.');
+        }
+
+        if (!defaultDate || !defaultReason?.trim() || !defaultReference?.trim()) {
+            return req.reject(
+                400,
+                'Default date, reason, and reference are required.'
+            );
+        }
+
+        const financing = await db.run(
+            SELECT.one.from(FinancingDB).where({ ID: financingId })
+        );
+
+        if (!financing) {
+            return req.reject(404, 'Murabaha financing was not found.');
+        }
+
+        if (financing.status !== 'ACTIVE') {
+            return req.reject(
+                409,
+                'Only an ACTIVE financing can be marked DEFAULTED.'
+            );
+        }
+
+        await db.run(
+            UPDATE(FinancingDB)
+                .set({
+                    defaultDate,
+                    defaultReason: defaultReason.trim(),
+                    defaultReference: defaultReference.trim(),
+                    status: 'DEFAULTED'
+                })
                 .where({ ID: financingId })
         );
 

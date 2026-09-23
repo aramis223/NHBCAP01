@@ -111,6 +111,62 @@ The lifecycle is covered by the repeatable regression script:
 
 The script creates an isolated synthetic financing record, executes the complete governed lifecycle, and verifies the resulting evidence fields and final `ACTIVE` status.
 
+### Exceptional Lifecycle States
+
+Exceptional Murabaha states are governed through explicit bound actions rather than direct status changes.
+
+The implemented exceptional actions are:
+
+- `cancelFinancing`
+- `markFinancingDefaulted`
+
+The governed exceptional transitions are:
+
+```text
+DRAFT
+CREDIT_APPROVED
+SHARIA_APPROVED
+ASSET_ACQUIRED
+CONTRACT_EXECUTED
+DELIVERED
+        │
+        ▼
+    CANCELLED
+```
+
+and:
+
+```text
+ACTIVE
+  │
+  ▼
+DEFAULTED
+```
+
+`ACTIVE` financing cannot be cancelled through the prototype cancellation workflow.
+
+`SETTLED` remains a terminal system-driven state and cannot be reached through a direct consumer status update.
+
+Direct lifecycle status changes through ordinary update requests are rejected. Consumers must use the governed lifecycle actions, while internal payment-processing logic retains responsibility for the automatic transition to `SETTLED`.
+
+Cancellation records:
+
+- cancellation date
+- cancellation reason
+- cancellation reference
+
+Default records:
+
+- default date
+- default reason
+- default reference
+
+Cancellation after asset acquisition, sale execution, or delivery is represented only as a prototype lifecycle control. A production Murabaha implementation would require additional Sharia, legal, accounting, asset-disposition, and operational rules.
+
+The exceptional-state behavior is covered by:
+
+`test/murabaha-exceptional-states.sh`
+
 ## Architecture Boundary
 The prototype follows these architecture principles:
 - SAP CAP owns the NHB-facing application and service boundary.
