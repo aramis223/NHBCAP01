@@ -709,6 +709,63 @@ The current query implementation is intentionally limited to supported equality 
 
 Unsupported query semantics will not be translated mechanically into superficially similar Finxact selection fields.
 
+### Collection pagination
+
+The `NHBCustomer` integration also supports controlled collection pagination
+at the NHB CAP boundary.
+
+Because `NHBCustomer` is an `@cds.persistence.skip` integration entity backed
+by an external Finxact result set, the custom READ handler applies OData
+pagination after provider-to-NHB transformation and NHB-side filtering.
+
+The locally verified pagination behavior is:
+
+```text
+$top=5
+→ 5 NHBCustomer records
+
+$skip=5&$top=3
+→ 3 NHBCustomer records beginning after the first five
+
+CustomerType eq 'Individual' + $top=3
+→ 3 Individual NHBCustomer records
+```
+
+This preserves the intended processing order:
+
+```text
+Finxact Party List
+        │
+        ▼
+Provider-to-NHB transformation
+        │
+        ▼
+NHB semantic filtering
+        │
+        ▼
+$skip / $top
+        │
+        ▼
+NHBCustomer[]
+```
+
+Additional keyed Get Party regression testing also confirmed successful
+retrieval using more than one form of valid Finxact PartyId.
+
+Verified examples included:
+
+```text
+2|98313
+4|e3861098-a2a9-4ec7-a35f-a938069199d7
+```
+
+Both returned Finxact `StatusCode = 0` and were successfully mapped through
+the existing integration contract. This further confirms that the current
+`PartySel.PartyKeys.PartyId` request structure is valid. The previously
+observed intermittent behavior for `2|98314` therefore remains a
+certification-environment/provider behavior requiring no CAP contract change
+based on current evidence.
+
 ### Customer identifier strategy
 
 The current `NHBCustomer` contract uses `CustomerNumber` as its key, with Finxact `PartyId` mapped provisionally to `CustomerNumber`.

@@ -148,15 +148,6 @@ module.exports = cds.service.impl(async function () {
         MurabahaPaymentReversal: ReversalDB
     } = cds.entities('NHBCAP01');
 
-    console.log('Fiserv environment check:', {
-        baseUrl: !!process.env.FISERV_API_BASE_URL,
-        tokenUrl: !!process.env.FISERV_TOKEN_URL,
-        apiKey: !!process.env.FISERV_API_KEY,
-        apiSecret: !!process.env.FISERV_API_SECRET,
-        accountId: !!process.env.FISERV_TEST_ACCOUNT_ID,
-        orgId: !!process.env.FISERV_ORG_ID
-    });
-
     this.before(['CREATE', 'UPDATE'], 'MurabahaFinancing', async req => {
         const data = req.data;
         const financingId = data.ID || req.params?.[0]?.ID;
@@ -529,13 +520,28 @@ module.exports = cds.service.impl(async function () {
 
             const parties = data.PartyListRec || [];
 
-            return parties
+            const customers = parties
                 .map(mapPartyListRecordToNHBCustomer)
                 .filter(Boolean)
                 .filter(customer =>
                     !customerTypeFilter ||
                     customer.CustomerType === customerTypeFilter
                 );
+
+            const limit = req.query.SELECT?.limit;
+
+            const top = limit?.rows?.val;
+            const skip = limit?.offset?.val || 0;
+
+            if (top !== undefined) {
+                return customers.slice(skip, skip + top);
+            }
+
+            if (skip) {
+                return customers.slice(skip);
+            }
+
+            return customers;
         } catch (error) {
             console.error('Fiserv party list request failed:', error);
             return req.reject(502, 'Fiserv service is currently unavailable.');

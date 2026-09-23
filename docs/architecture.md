@@ -1310,7 +1310,33 @@ Keyed READ by CustomerNumber
 CustomerType eq '<value>'
 Name eq '<value>'
 Name eq '<value>' and CustomerType eq '<value>'
+$top=<n>
+$skip=<n>
+$skip=<n>&$top=<n>
 ```
+
+For collection retrieval, pagination is applied at the NHB CAP boundary after
+Finxact Party records have been transformed and NHB-side filters have been
+evaluated. This is required because `NHBCustomer` is a non-persistent
+integration entity and the custom READ handler owns the external result set.
+
+Local regression testing verified:
+
+```text
+$top=5
+→ exactly 5 NHBCustomer records
+
+$skip=5&$top=3
+→ exactly 3 NHBCustomer records beginning after the first five
+```
+
+Pagination was also verified together with NHB-side filtering:
+
+```text
+CustomerType eq 'Individual' and $top=3
+→ exactly 3 Individual NHBCustomer records
+```
+
 ### 8.9 Current verification status
 
 The current Accountholder status is:
