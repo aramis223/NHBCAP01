@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { getAccessToken } = require("./auth");
 
-async function getPartyList(orgId) {
+async function getPartyList(orgId, options = {}) {
     const baseUrl = process.env.FISERV_API_BASE_URL;
 
     if (!baseUrl) {
@@ -9,10 +9,16 @@ async function getPartyList(orgId) {
     }
 
     if (!orgId) {
-        throw new Error("Fiserv orgId is required");
+        throw new Error("FISERV_ORG_ID is not configured");
     }
 
     const accessToken = await getAccessToken();
+
+    const partyListSel = {};
+
+    if (options.name) {
+        partyListSel.Name = options.name;
+    }
 
     const response = await fetch(
         `${baseUrl}/partyservice/parties/parties/secured/list`,
@@ -28,7 +34,7 @@ async function getPartyList(orgId) {
                 })
             },
             body: JSON.stringify({
-                PartyListSel: {}
+                PartyListSel: partyListSel
             })
         }
     );
@@ -41,13 +47,27 @@ async function getPartyList(orgId) {
         );
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+
+    if (!responseText) {
+        throw new Error(
+            `Fiserv Get Party List returned HTTP ${response.status} with an empty response body`
+        );
+    }
+
+    let data;
+
+    try {
+        data = JSON.parse(responseText);
+    } catch (error) {
+        throw new Error(
+            `Fiserv Get Party List returned invalid JSON: ${error.message}`
+        );
+    }
 
     if (!data.Status || data.Status.StatusCode !== "0") {
         throw new Error(
-            `Fiserv Get Party List returned ${
-                data.Status?.StatusCode || "Unknown"
-            }: ${data.Status?.StatusDesc || "Unknown error"}`
+            `Fiserv Get Party List failed: ${JSON.stringify(data.Status)}`
         );
     }
 
@@ -75,6 +95,7 @@ async function getParty(partyId, orgId) {
         `${baseUrl}/partyservice/parties/parties/secured`,
         {
             method: "POST",
+
             headers: {
                 Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json",
@@ -91,6 +112,7 @@ async function getParty(partyId, orgId) {
                     }
                 }
             })
+
         }
     );
 
@@ -106,8 +128,7 @@ async function getParty(partyId, orgId) {
 
     if (!data.Status || data.Status.StatusCode !== "0") {
         throw new Error(
-            `Fiserv Get Party returned ${
-                data.Status?.StatusCode || "Unknown"
+            `Fiserv Get Party returned ${data.Status?.StatusCode || "Unknown"
             }: ${data.Status?.StatusDesc || "Unknown error"}`
         );
     }

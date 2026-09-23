@@ -54,6 +54,90 @@ const validateNonNegative = (req, field, value) => {
     }
 };
 
+const parseEqFilters = where => {
+    const filters = {};
+
+    if (!Array.isArray(where) || where.length === 0) {
+        return filters;
+    }
+
+    for (let i = 0; i < where.length; i += 4) {
+        const field = where[i]?.ref?.[0];
+        const operator = where[i + 1];
+        const value = where[i + 2]?.val;
+
+        if (!field || operator !== '=') {
+            continue;
+        }
+
+        filters[field] = value;
+
+        if (i + 3 < where.length && where[i + 3] !== 'and') {
+            break;
+        }
+    }
+
+    return filters;
+};
+
+const mapPartyToNHBCustomer = party => {
+    const personInfo = party.PersonPartyInfo;
+    const orgInfo = party.OrgPartyInfo;
+
+    return {
+        CustomerNumber: party.PartyKeys?.PartyId,
+        Name: personInfo?.PersonData?.PersonName?.[0]?.FullName
+            || orgInfo?.OrgData?.OrgName?.[0]?.Name
+            || null,
+        CustomerType: personInfo
+            ? 'Individual'
+            : orgInfo
+                ? 'Corporate'
+                : null
+    };
+};
+
+const mapPartyListRecordToNHBCustomer = party => {
+    const partyId = party.PartyKeys?.PartyId;
+
+    if (!partyId) {
+        console.warn(
+            'Skipping Fiserv Party List record without PartyId:',
+            {
+                name:
+                    party.PersonPartyListInfo?.PersonName?.FullName
+                    || party.OrgPartyListInfo?.OrgName?.Name
+                    || null,
+                taxIdentType:
+                    party.PersonPartyListInfo?.TaxIdentType
+                    || party.OrgPartyListInfo?.TaxIdentType
+                    || null,
+                taxIdent:
+                    party.PersonPartyListInfo?.TaxIdent
+                    || party.OrgPartyListInfo?.TaxIdent
+                    || null
+            }
+        );
+
+        return null;
+
+    }
+
+    const personInfo = party.PersonPartyListInfo;
+    const orgInfo = party.OrgPartyListInfo;
+
+    return {
+        CustomerNumber: partyId,
+        Name: personInfo?.PersonName?.FullName
+            || orgInfo?.OrgName?.Name
+            || null,
+        CustomerType: personInfo
+            ? 'Individual'
+            : orgInfo
+                ? 'Corporate'
+                : null
+    };
+};
 module.exports = cds.service.impl(async function () {
     const db = await cds.connect.to('db');
     const { MurabahaFinancing } = this.entities;
@@ -417,73 +501,46 @@ module.exports = cds.service.impl(async function () {
 
     this.on('READ', 'NHBCustomer', async req => {
         const customerNumber = req.data?.CustomerNumber;
-            if (customerNumber) {
-                try {
-                    const data = await getParty(
+        if (customerNumber) {
+            try {
+                const data = await getParty(
                     customerNumber,
                     process.env.FISERV_ORG_ID
+                );
+
+                const party = data.PartyRec;
+                return mapPartyToNHBCustomer(party);
+
+            } catch (error) {
+                console.error('Fiserv Get Party request failed:', error);
+                return req.reject(502, 'Fiserv service is currently unavailable.');
+            }
+        }
+        try {
+            const where = req.query.SELECT?.where;
+            const filters = parseEqFilters(where);
+            const nameFilter = filters.Name || null;
+            const customerTypeFilter = filters.CustomerType || null;
+
+            const data = await getPartyList(
+                process.env.FISERV_ORG_ID,
+                nameFilter ? { name: nameFilter } : {}
             );
 
-            const party = data.PartyRec;
-            const personInfo = party.PersonPartyInfo;
-                const orgInfo = party.OrgPartyInfo;
-
-            return {
-    CustomerNumber: party.PartyKeys?.PartyId,
-    Name: personInfo?.PersonData?.PersonName?.[0]?.FullName
-        || orgInfo?.OrgData?.OrgName?.[0]?.Name
-        || null,
-    CustomerType: personInfo
-        ? 'Individual'
-        : orgInfo
-            ? 'Corporate'
-            : null
-};
-        } catch (error) {
-        console.error('Fiserv Get Party request failed:', error);
-        return req.reject(502, 'Fiserv service is currently unavailable.');
-    }
-}
-
-        try {
-        const data = await getPartyList(
-            process.env.FISERV_ORG_ID
-        );
-
-        const parties = data.PartyListRec || [];
-        const where = req.query.SELECT?.where;
-        const customerTypeFilter =
-            where?.[0]?.ref?.[0] === 'CustomerType' &&
-            where?.[1] === '='
-                ? where?.[2]?.val
-                : null;
+            const parties = data.PartyListRec || [];
 
             return parties
-                .map(party => {
-            const personInfo = party.PersonPartyListInfo;
-            const orgInfo = party.OrgPartyListInfo;
-
-            return {
-                CustomerNumber: party.PartyKeys?.PartyId,
-                Name: personInfo?.PersonName?.FullName
-                    || orgInfo?.OrgName?.Name
-                    || null,
-                CustomerType: personInfo
-                    ? 'Individual'
-                    : orgInfo
-                        ? 'Corporate'
-                        : null
-            };
-                })
-            .filter(customer =>
-                !customerTypeFilter ||
-                customer.CustomerType === customerTypeFilter
-        );
-    } catch (error) {
-        console.error('Fiserv party list request failed:', error);
-        return req.reject(502, 'Fiserv service is currently unavailable.');
-    }
-});
+                .map(mapPartyListRecordToNHBCustomer)
+                .filter(Boolean)
+                .filter(customer =>
+                    !customerTypeFilter ||
+                    customer.CustomerType === customerTypeFilter
+                );
+        } catch (error) {
+            console.error('Fiserv party list request failed:', error);
+            return req.reject(502, 'Fiserv service is currently unavailable.');
+        }
+    });
     this.on('getFiservAccountDetails', async req => {
         const { accountId } = req.data;
 
