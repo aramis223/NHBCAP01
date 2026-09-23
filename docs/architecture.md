@@ -431,6 +431,30 @@ reverseMurabahaPayment
 
 These operations belong to the NHB application/domain layer and are separate from the Fiserv integration capabilities.
 
+#### Murabaha servicing regression baseline
+
+The Murabaha servicing behavior is covered by the repeatable local regression script `test/murabaha-servicing.sh`.
+
+The regression creates an isolated financing and installment set for each run and verifies the governed servicing lifecycle end to end.
+
+Verified behaviors include:
+
+- payment before financing activation is rejected with HTTP 409
+- partial installment payment produces `PARTIALLY_PAID`
+- duplicate `externalPaymentId` values are rejected with HTTP 409
+- payments exceeding the outstanding installment balance are rejected with HTTP 409
+- a posted payment can be reversed before settlement
+- reversal restores the installment paid amount and status
+- the original payment is marked `REVERSED`
+- the same payment cannot be reversed twice
+- duplicate external reversal references are rejected
+- a financing can enter `DEFAULTED`
+- valid servicing payments remain accepted while financing is `DEFAULTED`
+- completion of all installments automatically moves the financing to `SETTLED`
+- ordinary payment reversal after `SETTLED` is rejected with HTTP 409 and requires a separate governed adjustment workflow
+
+The test uses run-specific external references so it can be executed repeatedly against persistent local data without colliding with evidence from earlier runs.
+
 ### 5.2 NHBCustomer abstraction
 
 `NHBCustomer` is defined as:

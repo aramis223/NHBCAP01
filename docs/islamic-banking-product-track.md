@@ -111,6 +111,30 @@ The lifecycle is covered by the repeatable regression script:
 
 The script creates an isolated synthetic financing record, executes the complete governed lifecycle, and verifies the resulting evidence fields and final `ACTIVE` status.
 
+### Servicing Regression
+
+The servicing lifecycle is covered independently by:
+
+`test/murabaha-servicing.sh`
+
+The servicing regression creates isolated financing and installment records and verifies:
+
+- payment rejection before activation
+- partial payment and `PARTIALLY_PAID` installment status
+- duplicate external-payment-ID prevention
+- overpayment prevention
+- payment reversal before settlement
+- restoration of installment balance following reversal
+- original payment transition to `REVERSED`
+- prevention of a second reversal of the same payment
+- duplicate external-reversal-reference prevention
+- transition to `DEFAULTED`
+- continued valid payment servicing while `DEFAULTED`
+- automatic transition to `SETTLED` after all installments are paid
+- rejection of ordinary reversal after settlement
+
+External payment, reversal, lifecycle-decision, ownership, delivery, and default references are generated with a run-specific suffix so the regression remains repeatable against persistent test data.
+
 ### Exceptional Lifecycle States
 
 Exceptional Murabaha states are governed through explicit bound actions rather than direct status changes.
@@ -226,6 +250,10 @@ Implemented and demonstrated capabilities include:
 - installment persistence
 - payment persistence
 - payment-reversal persistence
+- payment reversal before settlement
+- duplicate payment-reversal prevention
+- duplicate external-reversal-reference prevention
+- settled-financing reversal protection
 - lifecycle controls
 - credit-decision evidence
 - Sharia-approval evidence
@@ -262,7 +290,11 @@ This prototype provides one traceable chain from enterprise architecture through
 | Deliver asset and activate financing | Asset delivery and customer acceptance activities | Fulfilment process and servicing capability | Bound actions `MurabahaFinancing.confirmAssetDelivery` and `MurabahaFinancing.activateFinancing`; `assetDeliveredOn`, `deliveryEvidenceReference`, financing status | `ACTIVE` or `SETTLED` status requires delivery evidence. |
 | Collect installment payment | Payment receipt and allocation activity | Murabaha servicing / payment-processing capability; future external banking integration where justified | Bound action `MurabahaInstallment.postPayment`; `MurabahaPayment`; paid amount and installment status | USD 1,000 posted to installment 2; status changed to `PARTIALLY_PAID`. |
 | Prevent duplicate financial posting | Duplicate-payment exception path | Operational resilience and payment-integrity control | Unique `externalPaymentId` validation | Reuse of `TEST-PAY-20260920-001` was rejected without changing the balance. |
-| Prevent overpayment | Excess-payment exception path | Financial control and reconciliation requirement | Outstanding-balance validation in `service.js` | USD 11,000 against a USD 10,500 outstanding balance was rejected without data change. |
+| Prevent overpayment | Excess-payment exception path | Financial control and reconciliation requirement | Outstanding-balance validation in `service.js` | Payment exceeding the outstanding installment balance is rejected with HTTP 409 without changing servicing state. |
+| Reverse payment before settlement | Payment correction / controlled reversal path | Payment-integrity, auditability, and servicing-control capability | `reverseMurabahaPayment`; `MurabahaPaymentReversal`; original payment status and installment balance update | Reversal restores the installment balance, marks the payment `REVERSED`, and persists reversal evidence. |
+| Prevent duplicate reversal | Duplicate reversal exception path | Operational resilience and financial-integrity control | Payment reversal-state validation and unique external reversal reference | A second reversal of the same payment and reuse of an external reversal reference are rejected with HTTP 409. |
+| Continue servicing while defaulted | Delinquency / recovery servicing path | Collections, recovery, and financing-servicing capability | `markFinancingDefaulted`; payment-processing logic | Financing transitions to `DEFAULTED` while valid installment payments remain accepted. |
+| Protect settled financing | Post-settlement adjustment control | Settlement finality and governed adjustment capability | `reverseMurabahaPayment` settlement-state validation | Ordinary reversal after `SETTLED` is rejected with HTTP 409; a separate adjustment workflow is required. |
 | Complete financing | All installments paid / settlement end state | Product lifecycle closure and future accounting handoff | Automatic installment `PAID` and financing `SETTLED` transitions | Settlement occurs only when every installment is fully paid. |
 
 ## Evidence IDs and Demonstration Data
