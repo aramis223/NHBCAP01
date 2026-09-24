@@ -178,3 +178,95 @@ test('blocks reversal after the financing is settled', async () => {
   assert.equal((await paymentById(finalPayment.ID)).status, 'POSTED');
   assert.equal((await reversalsWithReference('TEST-AUTO-REV-SETTLED')).length, 0);
 });
+
+const accountingEventByCorrelation = correlationId => {
+    const service = getService();
+
+    return service.run(
+        cds.ql.SELECT.one
+            .from(service.entities.MurabahaAccountingEvent)
+            .where({ correlationId })
+    );
+};
+
+const postAccountingEvent = accountingEventId => getService().send({
+    event: 'postAccountingEvent',
+    data: {
+        accountingEventId
+    }
+});
+
+const setAccountingEventStatus = async (accountingEventId, postingStatus) => {
+    const db = await cds.connect.to('db');
+    const { MurabahaAccountingEvent } = cds.entities('NHBCAP01');
+
+    return db.run(
+        cds.ql.UPDATE(MurabahaAccountingEvent)
+            .set({ postingStatus })
+            .where({ ID: accountingEventId })
+    );
+};
+
+test('accepts a valid pending accounting event without changing its status', async () => {
+    const reference = 'TEST-AUTO-ACCOUNTING-001';
+
+    await postPayment(reference, 1000);
+
+    const event = await accountingEventByCorrelation(reference);
+
+    assert.ok(event);
+    assert.equal(event.eventType, 'PAYMENT_RECEIVED');
+    assert.equal(event.postingStatus, 'PENDING');
+
+    const result = await postAccountingEvent(event.ID);
+
+    assert.equal(result.ID, event.ID);
+    assert.equal(result.postingStatus, 'PENDING');
+    assert.equal(result.externalAccountingDocumentId, null);
+
+    const after = await accountingEventByCorrelation(reference);
+
+    assert.equal(after.postingStatus, 'PENDING');
+});
+
+test('rejects postAccountingEvent without an accounting event ID', async () => {
+    const service = getService();
+
+    await assert.rejects(
+        () => service.send({
+            event: 'postAccountingEvent',
+            data: {}
+        }),
+        /accounting event ID is required/i
+    );
+});
+
+test('rejects an unknown accounting event ID', async () => {
+    await assert.rejects(
+        () => postAccountingEvent(
+            '00000000-0000-0000-0000-000000000000'
+        ),
+        /accounting event was not found/i
+    );
+});
+
+test('rejects an accounting event that is no longer pending', async () => {
+    const reference = 'TEST-AUTO-ACCOUNTING-POSTED-001';
+
+    await postPayment(reference, 1000);
+
+    const event = await accountingEventByCorrelation(reference);
+
+    assert.ok(event);
+    assert.equal(event.postingStatus, 'PENDING');
+
+    await setAccountingEventStatus(event.ID, 'POSTED');
+
+    const changed = await accountingEventByCorrelation(reference);
+    assert.equal(changed.postingStatus, 'POSTED');
+
+    await assert.rejects(
+        () => postAccountingEvent(event.ID),
+        /only a pending accounting event can be submitted for posting/i
+    );
+});

@@ -110,6 +110,10 @@ service NHBCAP01Service {
         reason             : String(500)
     ) returns MurabahaPaymentReversal;
 
+    action postAccountingEvent(
+        accountingEventId : UUID
+    ) returns MurabahaAccountingEvent;
+    
     @readonly
     entity MurabahaAccountingEvent
     as projection on my.MurabahaAccountingEvent;

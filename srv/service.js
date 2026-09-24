@@ -982,6 +982,86 @@ module.exports = cds.service.impl(async function () {
         return tx.run(SELECT.one.from(ReversalDB).where({ ID: reversalId }));
     });
 
+    this.on('postAccountingEvent', async req => {
+        const { accountingEventId } = req.data;
+
+        if (!accountingEventId) {
+            return req.reject(400, 'Accounting event ID is required.');
+        }
+
+        const tx = db;
+
+        const accountingEvent = await tx.run(
+            SELECT.one
+                .from(AccountingEventDB)
+                .where({ ID: accountingEventId })
+        );
+
+        if (!accountingEvent) {
+            return req.reject(404, 'Murabaha accounting event was not found.');
+        }
+
+        if (accountingEvent.postingStatus !== 'PENDING') {
+            return req.reject(
+                409,
+                'Only a pending accounting event can be submitted for posting.'
+            );
+        }
+
+        if (!['PAYMENT_RECEIVED', 'PAYMENT_REVERSED'].includes(accountingEvent.eventType)) {
+            return req.reject(
+                400,
+                'Unsupported Murabaha accounting event type.'
+            );
+        }
+
+        const eventAmount = amount(accountingEvent.amount);
+
+        if (!Number.isFinite(eventAmount) || eventAmount <= 0) {
+            return req.reject(
+                400,
+                'Accounting event amount must be greater than zero.'
+            );
+        }
+
+        if (!accountingEvent.currency) {
+            return req.reject(
+                400,
+                'Accounting event currency is required.'
+            );
+        }
+
+        if (!accountingEvent.correlationId) {
+            return req.reject(
+                400,
+                'Accounting event correlation ID is required.'
+            );
+        }
+
+        if (
+            !accountingEvent.payment_ID ||
+            !accountingEvent.financing_ID ||
+            !accountingEvent.installment_ID
+        ) {
+            return req.reject(
+                409,
+                'Accounting event is missing Murabaha traceability references.'
+            );
+        }
+
+        /*
+         * SAP posting is deliberately not implemented here yet.
+         *
+         * Next increment:
+         * 1. resolve NHB accounting configuration
+         * 2. map the event to JOURNAL_ENTRY_CREATE_REQUEST_C
+         * 3. invoke SAP S/4HANA
+         * 4. update postingStatus / externalAccountingDocumentId
+         */
+
+        return accountingEvent;
+    });
+
     this.on('READ', 'NHBCustomer', async req => {
         const customerNumber = req.data?.CustomerNumber;
         if (customerNumber) {
