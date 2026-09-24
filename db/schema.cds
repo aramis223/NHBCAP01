@@ -84,9 +84,9 @@ entity MurabahaPayment : cuid, managed {
 
 
 entity MurabahaPaymentReversal : cuid, managed {
-    payment            : Association to one MurabahaPayment;
-    financing          : Association to one MurabahaFinancing;
-    installment        : Association to one MurabahaInstallment;
+    payment     : Association to one MurabahaPayment not null;
+    financing   : Association to one MurabahaFinancing not null;
+    installment : Association to one MurabahaInstallment not null;
     externalReversalId : String(100) not null;
     reversalDate       : Date not null;
     reason             : String(500) not null;
@@ -96,3 +96,20 @@ entity MurabahaPaymentReversal : cuid, managed {
 
 annotate MurabahaPaymentReversal with @assert.unique.reversalReference: [ externalReversalId ];
 annotate MurabahaPaymentReversal with @assert.unique.originalPayment: [ payment ];
+
+entity MurabahaAccountingEvent : cuid, managed {
+    eventType                    : String(50) not null;
+    payment                      : Association to one MurabahaPayment;
+    financing                    : Association to one MurabahaFinancing;
+    installment                  : Association to one MurabahaInstallment;
+    eventDate                    : Date not null;
+    amount                       : Decimal(15,2) not null;
+    currency                     : String(3) not null;
+    correlationId                : String(100) not null;
+    postingStatus                : String(30) default 'PENDING';
+    externalAccountingDocumentId : String(100);
+    errorMessage                 : String(500);
+}
+
+annotate MurabahaAccountingEvent
+with @assert.unique.paymentEventType: [ payment, eventType ];

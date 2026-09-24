@@ -109,6 +109,10 @@ service NHBCAP01Service {
         reversalDate       : Date,
         reason             : String(500)
     ) returns MurabahaPaymentReversal;
+
+    @readonly
+    entity MurabahaAccountingEvent
+    as projection on my.MurabahaAccountingEvent;
 }
 
 annotate NHBCAP01Service.MurabahaFinancing with @(

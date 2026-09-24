@@ -415,11 +415,12 @@ MurabahaFinancing
 MurabahaInstallment
 MurabahaPayment
 MurabahaPaymentReversal
+MurabahaAccountingEvent
 ```
 
 `Customer`, `Account`, and the Murabaha entities are backed by the NHB domain persistence model.
 
-`MurabahaPayment` and `MurabahaPaymentReversal` are exposed as read-only entities.
+`MurabahaPayment`, `MurabahaPaymentReversal`, and `MurabahaAccountingEvent` are exposed as read-only entities.
 
 The Murabaha service also provides business operations for payment processing and reversal, including:
 
@@ -430,6 +431,14 @@ reverseMurabahaPayment
 ```
 
 These operations belong to the NHB application/domain layer and are separate from the Fiserv integration capabilities.
+
+Murabaha servicing also persists accounting handoff events through `MurabahaAccountingEvent`.
+
+A successful payment creates a `PAYMENT_RECEIVED` event, while an approved reversal creates a `PAYMENT_REVERSED` event. These events are written within the same CAP request transaction as the corresponding servicing-state changes.
+
+New accounting events use `postingStatus = PENDING`. This represents an NHB-owned accounting obligation awaiting downstream processing; it is not evidence of a completed external accounting posting.
+
+The model provides `correlationId` for traceability and `externalAccountingDocumentId` for a future external accounting reference. SAP S/4HANA remains the target accounting platform, but external accounting posting is not yet implemented end to end.
 
 #### Murabaha servicing regression baseline
 
@@ -452,6 +461,9 @@ Verified behaviors include:
 - valid servicing payments remain accepted while financing is `DEFAULTED`
 - completion of all installments automatically moves the financing to `SETTLED`
 - ordinary payment reversal after `SETTLED` is rejected with HTTP 409 and requires a separate governed adjustment workflow
+- payment posting creates a correlated `PAYMENT_RECEIVED` accounting event
+- payment reversal creates a correlated `PAYMENT_REVERSED` accounting event
+- new accounting events begin in `PENDING` posting state
 
 The test uses run-specific external references so it can be executed repeatedly against persistent local data without colliding with evidence from earlier runs.
 

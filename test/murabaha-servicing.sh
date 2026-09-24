@@ -195,6 +195,30 @@ http -fsS \
 
 echo "PASS: partial payment -> PARTIALLY_PAID"
 
+# Verify PAYMENT_RECEIVED accounting event.
+
+http -fsS \
+"$BASE_URL/MurabahaAccountingEvent?\$filter=correlationId%20eq%20'PAY-SVC-001-$RUN_ID'" \
+| jq -e \
+  --arg payment "$PAYMENT_1_ID" \
+  --arg financing "$FINANCING_ID" \
+  --arg installment "$INSTALLMENT_1" \
+  --arg correlation "PAY-SVC-001-$RUN_ID" '
+(if type == "array" then . else .value end) as $events
+| ($events | length) == 1 and
+  $events[0].eventType == "PAYMENT_RECEIVED" and
+  $events[0].payment_ID == $payment and
+  $events[0].financing_ID == $financing and
+  $events[0].installment_ID == $installment and
+  $events[0].correlationId == $correlation and
+  $events[0].postingStatus == "PENDING" and
+  ($events[0].amount | tonumber) == 400 and
+  $events[0].currency == "USD"
+' >/dev/null
+
+echo "PASS: PAYMENT_RECEIVED accounting event recorded"
+
+
 # ------------------------------------------------------------
 # 4. Duplicate external payment ID must fail
 # ------------------------------------------------------------
@@ -250,6 +274,30 @@ http -fsS \
   | jq -e '.status == "REVERSED"' >/dev/null
 
 echo "PASS: reversal restored installment balance and payment status"
+
+
+# Verify PAYMENT_REVERSED accounting event.
+
+http -fsS \
+"$BASE_URL/MurabahaAccountingEvent?\$filter=correlationId%20eq%20'REV-SVC-001-$RUN_ID'" \
+| jq -e \
+  --arg payment "$PAYMENT_1_ID" \
+  --arg financing "$FINANCING_ID" \
+  --arg installment "$INSTALLMENT_1" \
+  --arg correlation "REV-SVC-001-$RUN_ID" '
+(if type == "array" then . else .value end) as $events
+| ($events | length) == 1 and
+  $events[0].eventType == "PAYMENT_REVERSED" and
+  $events[0].payment_ID == $payment and
+  $events[0].financing_ID == $financing and
+  $events[0].installment_ID == $installment and
+  $events[0].correlationId == $correlation and
+  $events[0].postingStatus == "PENDING" and
+  ($events[0].amount | tonumber) == 400 and
+  $events[0].currency == "USD"
+' >/dev/null
+
+echo "PASS: PAYMENT_REVERSED accounting event recorded"
 
 # ------------------------------------------------------------
 # 7. Reversing the same payment again must fail

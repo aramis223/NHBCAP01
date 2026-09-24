@@ -132,8 +132,45 @@ The servicing regression creates isolated financing and installment records and 
 - continued valid payment servicing while `DEFAULTED`
 - automatic transition to `SETTLED` after all installments are paid
 - rejection of ordinary reversal after settlement
+- creation of a `PAYMENT_RECEIVED` accounting event when a payment is posted
+- creation of a `PAYMENT_REVERSED` accounting event when a payment is reversed
+- accounting-event correlation to the originating payment or reversal reference
+- initial accounting-event status of `PENDING`, representing an accounting handoff obligation rather than completed external posting
 
 External payment, reversal, lifecycle-decision, ownership, delivery, and default references are generated with a run-specific suffix so the regression remains repeatable against persistent test data.
+
+### Accounting Event Baseline
+
+Murabaha servicing now creates NHB-owned accounting events as part of the same CAP request transaction that changes the servicing state.
+
+The persisted `MurabahaAccountingEvent` records include:
+
+- `eventType`
+- payment, financing, and installment references
+- `eventDate`
+- `amount`
+- `currency`
+- `correlationId`
+- `postingStatus`
+- optional `externalAccountingDocumentId`
+- optional `errorMessage`
+
+The currently implemented event types are:
+
+- `PAYMENT_RECEIVED`
+- `PAYMENT_REVERSED`
+
+New accounting events are created with:
+
+`postingStatus = PENDING`
+
+`PENDING` means that NHBCAP01 has recorded a durable accounting handoff obligation. It does not mean that an external accounting platform has posted a journal entry.
+
+The payment or reversal state change and its corresponding accounting event are executed within the same CAP request transaction so that the servicing state and accounting obligation are committed together.
+
+A future SAP S/4HANA integration can process these pending events and, after successful external posting, associate the resulting accounting document through `externalAccountingDocumentId` and an appropriate posting status.
+
+This baseline therefore establishes the NHB-side accounting integration boundary without claiming that SAP S/4HANA posting has already been implemented.
 
 ### Exceptional Lifecycle States
 
@@ -249,6 +286,10 @@ Implemented and demonstrated capabilities include:
 - Murabaha financing persistence
 - installment persistence
 - payment persistence
+- Murabaha accounting-event persistence
+- `PAYMENT_RECEIVED` accounting-event creation
+- `PAYMENT_REVERSED` accounting-event creation
+- accounting-event correlation and pending-posting state
 - payment-reversal persistence
 - payment reversal before settlement
 - duplicate payment-reversal prevention

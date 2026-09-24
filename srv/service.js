@@ -145,7 +145,8 @@ module.exports = cds.service.impl(async function () {
         MurabahaFinancing: FinancingDB,
         MurabahaInstallment: InstallmentDB,
         MurabahaPayment: PaymentDB,
-        MurabahaPaymentReversal: ReversalDB
+        MurabahaPaymentReversal: ReversalDB,
+        MurabahaAccountingEvent: AccountingEventDB
     } = cds.entities('NHBCAP01');
 
     this.before(['CREATE', 'UPDATE'], 'MurabahaFinancing', async req => {
@@ -820,6 +821,22 @@ module.exports = cds.service.impl(async function () {
                 status: 'POSTED'
             })
         );
+
+        await tx.run(
+            INSERT.into(AccountingEventDB).entries({
+                ID: cds.utils.uuid(),
+                eventType: 'PAYMENT_RECEIVED',
+                payment_ID: paymentId,
+                financing_ID: financingId,
+                installment_ID: installmentId,
+                eventDate: paymentDate,
+                amount: paymentAmount,
+                currency: paymentCurrency,
+                correlationId: externalPaymentId,
+                postingStatus: 'PENDING'
+            })
+        );
+
         await tx.run(
             UPDATE(InstallmentDB)
                 .set({ paidAmount: newPaidAmount, status: newInstallmentStatus })
@@ -862,12 +879,18 @@ module.exports = cds.service.impl(async function () {
         const { paymentId, externalReversalId, reversalDate, reason } = req.data;
         const reference = externalReversalId?.trim();
         const explanation = reason?.trim();
+
         if (!paymentId || !reference || !reversalDate || !explanation) {
-            return req.reject(400, 'Payment ID, reversal reference, date, and reason are required.');
+            return req.reject(
+                400,
+                'Payment ID, reversal reference, date, and reason are required.'
+            );
         }
 
+        const tx = db;
+
         // The request's managed transaction keeps the audit record and balance update together.
-        const payment = await db.run(
+        const payment = await tx.run(
             SELECT.one.from(PaymentDB).where({ ID: paymentId })
         );
         if (!payment) {
@@ -877,7 +900,7 @@ module.exports = cds.service.impl(async function () {
             return req.reject(409, 'Only a posted payment can be reversed; this payment may already be reversed.');
         }
 
-        const financing = await db.run(
+        const financing = await tx.run(
             SELECT.one.from(FinancingDB).where({ ID: payment.financing_ID })
         );
         if (!financing) {
@@ -887,20 +910,20 @@ module.exports = cds.service.impl(async function () {
             return req.reject(409, 'A settled financing cannot be reversed without an approved adjustment workflow.');
         }
 
-        const duplicateReference = await db.run(
+        const duplicateReference = await tx.run(
             SELECT.one.from(ReversalDB).where({ externalReversalId: reference })
         );
         if (duplicateReference) {
             return req.reject(409, 'A reversal with this external reversal ID already exists.');
         }
-        const priorReversal = await db.run(
+        const priorReversal = await tx.run(
             SELECT.one.from(ReversalDB).where({ payment_ID: paymentId })
         );
         if (priorReversal) {
             return req.reject(409, 'This payment has already been reversed.');
         }
 
-        const installment = await db.run(
+        const installment = await tx.run(
             SELECT.one.from(InstallmentDB).where({ ID: payment.installment_ID })
         );
         if (!installment || installment.financing_ID !== payment.financing_ID) {
@@ -919,7 +942,7 @@ module.exports = cds.service.impl(async function () {
                 : 'PARTIALLY_PAID';
         const reversalId = cds.utils.uuid();
 
-        await db.run(
+        await tx.run(
             INSERT.into(ReversalDB).entries({
                 ID: reversalId,
                 payment_ID: paymentId,
@@ -932,16 +955,31 @@ module.exports = cds.service.impl(async function () {
                 currency: payment.currency
             })
         );
-        await db.run(
+        await tx.run(
             UPDATE(PaymentDB).set({ status: 'REVERSED' }).where({ ID: paymentId })
         );
-        await db.run(
+        await tx.run(
             UPDATE(InstallmentDB)
                 .set({ paidAmount: newPaidAmount, status: newInstallmentStatus })
                 .where({ ID: payment.installment_ID })
         );
 
-        return db.run(SELECT.one.from(ReversalDB).where({ ID: reversalId }));
+        await tx.run(
+            INSERT.into(AccountingEventDB).entries({
+                ID: cds.utils.uuid(),
+                eventType: 'PAYMENT_REVERSED',
+                payment_ID: paymentId,
+                financing_ID: payment.financing_ID,
+                installment_ID: payment.installment_ID,
+                eventDate: reversalDate,
+                amount: paymentAmount,
+                currency: payment.currency,
+                correlationId: reference,
+                postingStatus: 'PENDING'
+            })
+        );
+
+        return tx.run(SELECT.one.from(ReversalDB).where({ ID: reversalId }));
     });
 
     this.on('READ', 'NHBCustomer', async req => {
@@ -994,7 +1032,6 @@ module.exports = cds.service.impl(async function () {
             if (skip) {
                 return customers.slice(skip);
             }
-
             return customers;
         } catch (error) {
             console.error('Fiserv party list request failed:', error);
