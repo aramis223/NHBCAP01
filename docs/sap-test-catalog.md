@@ -177,9 +177,7 @@ The selected approach must be confirmed against the supported SAP S/4HANA servic
 
 ### 7.5 Governed CAP Accounting Operation
 
-The accounting-event entity remains read-only to service consumers. Accounting posting must therefore be triggered through an explicit CAP business operation rather than by permitting direct updates to `MurabahaAccountingEvent`.
-
-The initial operation is conceptually equivalent to:
+The accounting-event entity remains read-only to service consumers. Accounting posting is triggered through the explicit CAP action:
 
 ```cds
 action postAccountingEvent(
@@ -187,20 +185,69 @@ action postAccountingEvent(
 ) returns MurabahaAccountingEvent;
 ```
 
-The operation is responsible for:
+The implemented operation is responsible for:
 
 - loading the specified accounting event
 - verifying that the event exists
 - verifying that `postingStatus` is `PENDING`
 - validating the event data required for SAP posting
-- resolving the applicable accounting configuration
-- mapping the NHB event to the SAP journal-entry request
-- invoking the supported SAP S/4HANA accounting service
+- resolving the applicable NHB accounting configuration
+- mapping the NHB event to a normalized journal-entry candidate
+- building the SAP synchronous Journal Entry SOAP request
+- invoking the configured SAP transport
+- parsing the SAP synchronous confirmation
 - recording the resulting SAP accounting-document reference on success
-- recording a normalized error on failure
-- preventing uncontrolled duplicate posting of an already completed event
+- recording a normalized error on posting failure
+- preventing uncontrolled duplicate submission of a non-pending event
+
+The current normal posting path supports `PAYMENT_RECEIVED`.
+
+`PAYMENT_REVERSED` is deliberately excluded from the normal posting path. A reversal accounting event remains `PENDING` until the dedicated SAP reversal contract is implemented and verified.
+
+The SAP-specific implementation is separated under:
+
+```text
+srv/sap/
+├── accounting.js
+├── config.js
+├── journal-entry-soap.js
+├── journal-entry-response.js
+└── transport.js
+```
+
+The responsibilities are separated as follows:
+
+- `config.js` loads NHB accounting configuration from runtime configuration.
+- `accounting.js` validates the accounting event, maps it to the normalized journal-entry model, and orchestrates the posting flow.
+- `journal-entry-soap.js` builds the synchronous SAP Journal Entry SOAP request.
+- `transport.js` provides the HTTP transport boundary.
+- `journal-entry-response.js` parses the SAP synchronous confirmation and derives the normalized external accounting-document reference.
+
+The transport currently supports two execution modes:
+
+```text
+Local / test
+    │
+    ▼
+Explicit endpoint
++ Basic Authentication
+```
+
+and:
+
+```text
+SAP BTP Cloud Foundry
+    │
+    ▼
+SAP BTP Destination
+    │
+    ▼
+SAP Cloud SDK HTTP client
+```
 
 The CAP operation therefore acts as the governed boundary between NHB-owned Murabaha servicing and the external SAP accounting platform.
+
+---
 
 ### 7.6 Posting Status Model
 
@@ -212,44 +259,247 @@ The initial accounting-posting lifecycle uses three statuses:
 
 `PENDING` indicates that NHBCAP01 has created an accounting obligation that has not yet been successfully posted to SAP S/4HANA.
 
-`POSTED` indicates that the external SAP accounting operation completed successfully and NHBCAP01 recorded the resulting accounting-document reference.
+For a valid `PAYMENT_RECEIVED` accounting event, `postAccountingEvent` attempts the SAP posting flow.
 
-`FAILED` indicates that an accounting-posting attempt did not complete successfully and that a normalized integration error was recorded for investigation.
+A confirmed SAP accounting document produces:
 
-The initial prototype deliberately does not introduce additional operational states such as `RETRYING`, `QUEUED`, `IN_PROGRESS`, or `CANCELLED`.
+```text
+PENDING
+   │
+   ▼
+POSTED
+```
+
+and NHBCAP01 stores the resulting SAP accounting-document reference in:
+
+```text
+externalAccountingDocumentId
+```
+
+The current normalized external identifier combines:
+
+```text
+CompanyCode-FiscalYear-AccountingDocument
+```
+
+For example:
+
+```text
+NHB1-2026-1900000123
+```
+
+A successful HTTP response alone is not treated as a successful accounting posting.
+
+NHBCAP01 parses the synchronous SAP response and requires a valid:
+
+- accounting document
+- company code
+- fiscal year
+
+before changing the accounting event to `POSTED`.
+
+An SAP confirmation containing:
+
+```text
+AccountingDocument = 0000000000
+```
+
+is treated as a failed business posting rather than a successful posting.
+
+If transport, SOAP processing, SAP response validation, or SAP business posting fails after the posting attempt begins, NHBCAP01 records:
+
+```text
+postingStatus = FAILED
+errorMessage  = normalized failure information
+```
+
+The failed accounting event is returned as a committed audit state.
+
+This avoids updating the event to `FAILED` and then rejecting the same CAP request, which could cause the request transaction to roll back the failure evidence.
+
+If required SAP accounting configuration is unavailable before external posting begins, the event is not falsely marked as a failed SAP posting. It remains `PENDING`.
+
+`PAYMENT_REVERSED` also remains `PENDING` until its dedicated SAP reversal implementation is available.
+
+The initial prototype deliberately does not introduce additional operational states such as:
+
+- `RETRYING`
+- `QUEUED`
+- `IN_PROGRESS`
+- `CANCELLED`
 
 Retry orchestration, asynchronous queues, recovery workflows, and operational monitoring should be introduced only when demonstrated integration requirements justify them.
 
-### 7.7 Initial SAP Test Scope
+---
 
-The first SAP accounting integration increment will focus on the existing SAP test-catalog scenarios:
+### 7.7 SAP Accounting Integration Verification
 
-- `SAP-T04` — Validate Payment Handoff
-- `SAP-T05` — Post Journal Entry
+The NHBCAP01 SAP accounting-posting boundary is now implemented and verified through isolated SAP-layer tests and CAP-level regression tests.
 
-`SAP-T04` verifies the NHB-side preparation of the accounting request before any external posting is attempted. The test should confirm that NHBCAP01 can:
+The implemented flow is:
 
-- load a `PENDING` accounting event
-- validate the required event data
-- reject incomplete or inconsistent accounting events
-- resolve the required accounting configuration
-- preserve the NHB correlation identifier
-- produce a complete SAP journal-entry request candidate
+```text
+MurabahaAccountingEvent
+postingStatus = PENDING
+        │
+        ▼
+Validate accounting event
+        │
+        ▼
+Resolve NHB accounting configuration
+        │
+        ▼
+Map to normalized journal-entry candidate
+        │
+        ▼
+Build SAP synchronous SOAP request
+        │
+        ▼
+Invoke SAP transport
+        │
+        ▼
+Parse SAP synchronous confirmation
+        │
+        ├── valid accounting document
+        │       │
+        │       ▼
+        │     POSTED
+        │       +
+        │ externalAccountingDocumentId
+        │
+        └── posting / transport / response failure
+                │
+                ▼
+              FAILED
+                +
+           errorMessage
+```
 
-`SAP-T05` verifies the actual SAP S/4HANA posting step through `JOURNAL_ENTRY_CREATE_REQUEST_C`.
+The normalized journal-entry model currently includes:
 
-A successful test should confirm that:
+- event type
+- company code
+- accounting document type
+- business transaction type
+- created-by user
+- document date
+- posting date
+- transaction currency
+- amount
+- debit G/L account
+- credit G/L account
+- correlation reference
+- NHB accounting-event identifier
+- payment identifier
+- financing identifier
+- installment identifier
 
-- NHBCAP01 sends the mapped accounting request to SAP S/4HANA
-- SAP accepts and posts the journal entry
-- SAP returns an accounting-document identifier or equivalent posting reference
-- NHBCAP01 changes the accounting event from `PENDING` to `POSTED`
-- `externalAccountingDocumentId` is populated with the returned SAP reference
-- the original NHB `correlationId` remains available for end-to-end traceability
+The synchronous SOAP request uses the SAP Journal Entry request hierarchy beginning with:
 
-A failed SAP posting should leave sufficient evidence for investigation through `postingStatus = FAILED` and `errorMessage`, without falsely marking the accounting event as successfully posted.
+```text
+JournalEntryBulkCreateRequest
+```
 
-Every successful SAP accounting test should become a repeatable regression scenario in accordance with the catalog regression rule.
+and contains the nested:
+
+```text
+JournalEntryCreateRequest
+```
+
+together with:
+
+- outer message header
+- journal-entry request message header
+- creation timestamps
+- journal-entry data
+- debit item
+- credit item
+
+The current request baseline uses:
+
+```text
+OriginalReferenceDocumentType = BKPFF
+```
+
+and the configured business transaction type, currently tested with:
+
+```text
+RFBU
+```
+
+Accounting configuration is deliberately externalized from the Murabaha domain model.
+
+The current required configuration includes:
+
+- company code
+- document type
+- business transaction type
+- created-by user
+- debit G/L account
+- credit G/L account
+
+These values remain prototype configuration and must not be interpreted as approved production accounting policy.
+
+The automated SAP accounting baseline currently verifies:
+
+- complete accounting configuration
+- rejection of incomplete accounting configuration
+- mapping of `PAYMENT_RECEIVED`
+- recognition of `PAYMENT_REVERSED` as an accounting event
+- exclusion of `PAYMENT_REVERSED` from the normal SOAP posting path
+- invalid accounting amount rejection
+- SAP configuration loading from environment variables
+- missing SAP configuration detection
+- normalized journal-entry construction
+- SOAP message-context validation
+- synchronous SAP SOAP request construction
+- XML escaping
+- Basic Authentication transport
+- SAP BTP Destination transport
+- dependency-injected SAP transport testing
+- successful SAP confirmation parsing
+- SAP business-failure parsing
+- SOAP Fault handling
+- incomplete SAP confirmation rejection
+- CAP-level `PENDING → FAILED` transition
+- persistence of `errorMessage`
+- CAP-level `PENDING → POSTED` transition
+- persistence of `externalAccountingDocumentId`
+
+The CAP-level regression verifies both principal posting outcomes:
+
+```text
+PENDING
+   │
+   ├── SAP confirmed
+   │      │
+   │      ▼
+   │    POSTED
+   │
+   └── SAP posting failed
+          │
+          ▼
+        FAILED
+```
+
+The current integration has therefore progressed beyond request preparation alone.
+
+However, the successful posting path is currently verified with controlled SAP responses in the test environment.
+
+Live posting against the deployed SAP S/4HANA laboratory environment remains the external verification step for `SAP-T05`.
+
+`SAP-T04` is now represented by the implemented validation, accounting-configuration, mapping, and SOAP-request construction layers.
+
+`SAP-T05` will be considered externally verified when:
+
+- NHBCAP01 sends the generated request to the deployed SAP S/4HANA service
+- SAP creates the accounting document
+- SAP returns the accounting-document identity
+- NHBCAP01 records `postingStatus = POSTED`
+- `externalAccountingDocumentId` contains the returned SAP reference
+- the NHB `correlationId` remains available for end-to-end traceability
+
+Every successful live SAP accounting test should then become a repeatable regression scenario in accordance with the catalog regression rule.
 
 ## 8. Regression rule
 

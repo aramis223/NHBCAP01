@@ -434,11 +434,94 @@ These operations belong to the NHB application/domain layer and are separate fro
 
 Murabaha servicing also persists accounting handoff events through `MurabahaAccountingEvent`.
 
-A successful payment creates a `PAYMENT_RECEIVED` event, while an approved reversal creates a `PAYMENT_REVERSED` event. These events are written within the same CAP request transaction as the corresponding servicing-state changes.
+A successful payment creates a `PAYMENT_RECEIVED` event, while an approved payment reversal creates a `PAYMENT_REVERSED` event.
 
-New accounting events use `postingStatus = PENDING`. This represents an NHB-owned accounting obligation awaiting downstream processing; it is not evidence of a completed external accounting posting.
+These events are written within the same CAP request transaction as the corresponding servicing-state changes so that the business state and accounting obligation are committed together.
 
-The model provides `correlationId` for traceability and `externalAccountingDocumentId` for a future external accounting reference. SAP S/4HANA remains the target accounting platform, but external accounting posting is not yet implemented end to end.
+New accounting events use `postingStatus = PENDING`.
+
+`PENDING` represents an NHB-owned accounting obligation that has not yet been successfully posted to SAP S/4HANA.
+
+The accounting-event entity remains read-only to service consumers.
+
+Accounting posting is governed through the explicit CAP action `postAccountingEvent(accountingEventId)` rather than through direct updates to `MurabahaAccountingEvent`.
+
+The current normal posting path supports `PAYMENT_RECEIVED`.
+
+The implemented SAP accounting flow is:
+
+MurabahaAccountingEvent  
+`postingStatus = PENDING`  
+↓  
+`postAccountingEvent`  
+↓  
+Validate accounting event  
+↓  
+Resolve NHB accounting configuration  
+↓  
+Map normalized journal-entry candidate  
+↓  
+Build SAP synchronous Journal Entry SOAP request  
+↓  
+Invoke configured SAP transport  
+↓  
+Parse SAP synchronous confirmation  
+↓  
+
+SAP confirmed accounting document → `POSTED` + `externalAccountingDocumentId`
+
+SAP posting, transport, SOAP, or response failure → `FAILED` + `errorMessage`
+
+The SAP-specific implementation is isolated under:
+
+`srv/sap/accounting.js`  
+`srv/sap/config.js`  
+`srv/sap/journal-entry-soap.js`  
+`srv/sap/journal-entry-response.js`  
+`srv/sap/transport.js`
+
+The responsibilities are separated as follows:
+
+- `config.js` loads NHB accounting configuration from runtime configuration.
+- `accounting.js` validates accounting events, maps them to the normalized journal-entry model, and orchestrates posting.
+- `journal-entry-soap.js` builds the synchronous SAP Journal Entry SOAP request.
+- `transport.js` provides the SAP HTTP transport boundary.
+- `journal-entry-response.js` parses the SAP synchronous confirmation and derives the normalized external accounting-document reference.
+
+The transport supports two execution patterns:
+
+- explicit endpoint and Basic Authentication for controlled local and test execution
+- SAP BTP Destination-based transport using the SAP Cloud SDK for Cloud Foundry execution
+
+A successful HTTP response alone is not treated as evidence that SAP posted an accounting document.
+
+NHBCAP01 requires the synchronous SAP confirmation to contain a valid accounting document together with company code and fiscal year before changing the accounting event to `POSTED`.
+
+The normalized external accounting reference is currently stored in the form `CompanyCode-FiscalYear-AccountingDocument`.
+
+For example: `NHB1-2026-1900000123`.
+
+If an SAP posting attempt begins but fails because of transport, SOAP processing, SAP response validation, or SAP business validation, NHBCAP01 records `postingStatus = FAILED` together with normalized failure information in `errorMessage`.
+
+This failed state is persisted as accounting audit evidence.
+
+If required accounting configuration is unavailable before the SAP posting attempt begins, the event remains `PENDING` rather than being falsely recorded as an SAP posting failure.
+
+`PAYMENT_REVERSED` is intentionally excluded from the normal payment-received posting path.
+
+Its accounting event remains `PENDING` until the dedicated SAP reversal contract is implemented and verified.
+
+The application-side SAP posting path is now verified through isolated SAP-layer tests and CAP-level regression using controlled SAP responses.
+
+The verified CAP-level outcomes include:
+
+- `PENDING → POSTED`
+- persistence of `externalAccountingDocumentId`
+- `PENDING → FAILED`
+- persistence of `errorMessage`
+- prevention of posting an accounting event that is no longer `PENDING`
+
+Live SAP S/4HANA journal-entry posting remains an external verification milestone and is not yet claimed as completed end to end.
 
 #### Murabaha servicing regression baseline
 
@@ -2116,42 +2199,87 @@ CAP remains the controlled application and integration boundary.
 
 The target architecture does not assume direct database-to-database integration between Finxact, NHB persistence, and SAP S/4HANA.
 
-### 12.4 Target SAP S/4HANA integration
+### 12.4 SAP S/4HANA Integration
 
-SAP S/4HANA integration remains a target capability and has not yet been demonstrated end to end in NHBCAP01.
+SAP S/4HANA accounting integration is now implemented at the NHBCAP01 application and integration boundary.
 
-The intended architectural approach is:
+The current architecture follows:
 
-```text
 NHB CAP
-   │
-   ▼
-Supported SAP API / Service
-   │
-   ▼
+↓
+NHB SAP accounting adapter
+↓
+SAP synchronous Journal Entry service
+↓
 SAP S/4HANA
-```
 
-rather than:
+The implementation does not use direct SAP S/4HANA database access.
 
-```text
-NHB CAP
-   │
-   ▼
-Direct S/4HANA database access
-```
+The SAP accounting integration is separated under `srv/sap/` and currently provides:
 
-Potential future integration areas include:
+- NHB accounting configuration resolution
+- normalized accounting-event to journal-entry mapping
+- synchronous SAP Journal Entry SOAP request construction
+- SOAP message-context generation
+- local/test HTTP transport using Basic Authentication
+- SAP BTP Destination-aware transport through the SAP Cloud SDK
+- synchronous SAP confirmation parsing
+- SOAP Fault handling
+- SAP business-posting failure detection
+- normalized accounting-document identification
+- CAP accounting-event state transitions
 
-- Finance
-- Accounting
+The current normal posting path supports `PAYMENT_RECEIVED`.
+
+The implemented flow is:
+
+MurabahaAccountingEvent
+`postingStatus = PENDING`
+↓
+`postAccountingEvent`
+↓
+Validate accounting event
+↓
+Resolve NHB accounting configuration
+↓
+Map normalized journal entry
+↓
+Build SAP synchronous SOAP request
+↓
+Invoke SAP transport
+↓
+Parse SAP confirmation
+↓
+
+SAP confirmed accounting document → `POSTED` + `externalAccountingDocumentId`
+
+SAP posting failure → `FAILED` + `errorMessage`
+
+A successful HTTP response alone is not considered evidence of successful accounting posting.
+
+NHBCAP01 requires a valid SAP accounting document together with company code and fiscal year before changing the event to `POSTED`.
+
+The application-side integration has been verified through isolated SAP-layer tests and CAP-level regression using controlled SAP responses.
+
+Live SAP S/4HANA journal-entry posting remains pending external verification against the deployed SAP laboratory environment.
+
+`PAYMENT_REVERSED` is intentionally excluded from the current normal posting path. Its dedicated SAP reversal contract remains a separate integration milestone.
+
+Additional SAP integration areas remain selective future capabilities, including:
+
 - Business Partner
 - cash-flow and liquidity-related capabilities
 - Procurement
 - Controlling
 - other enterprise services justified by NHB capability requirements
 
-The exact SAP services and integration patterns should be selected only when the corresponding NHB use cases are defined and the relevant SAP APIs are inspected.
+Future SAP services should continue to be introduced only when a defined NHB use case exists and the corresponding supported SAP API or service has been inspected and independently verified.
+
+The architectural rule remains:
+
+Supported SAP API / Service
+→ controlled NHBCAP01 integration
+→ no direct SAP database coupling
 
 ### 12.5 Evolution principle
 
@@ -2235,7 +2363,7 @@ Current limitations and open items include:
 - Production-grade authorization design remains future work.
 - Runtime secret management can be strengthened as the deployment architecture matures.
 - Fiserv integration currently focuses on retrieval scenarios; broader transactional capabilities have not yet been introduced.
-- SAP S/4HANA integration has not yet been implemented end to end.
+- SAP S/4HANA accounting integration is implemented through the NHBCAP01 application boundary and verified through controlled regression; live SAP S/4HANA posting remains pending external verification.
 - The final role of SAP BTP Destination Service in the target architecture remains undecided.
 
 These items are recorded explicitly so that verified implementation, temporary integration mappings, and future architecture remain distinguishable.
@@ -2319,30 +2447,98 @@ and:
 External banking-platform capabilities
 ```
 
-### 15.5 Introduce SAP S/4HANA integration
+### 15.5 Complete SAP S/4HANA Accounting Verification
 
-When the SAP S/4HANA environment is available, the project should select a concrete NHB use case and identify the corresponding supported SAP API or service.
+The first SAP S/4HANA integration use case has now been selected and implemented.
 
-The first SAP integration should follow the same evidence-based progression used for Fiserv:
+The initial use case is Murabaha payment accounting through the SAP synchronous Journal Entry service.
 
-```text
-Inspect supported API
-        │
-        ▼
-Validate independently
-        │
-        ▼
-Implement CAP integration
-        │
-        ▼
-Test locally
-        │
-        ▼
-Deploy and verify
-        │
-        ▼
-Document architectural baseline
-```
+The implemented progression has been:
+
+Inspect supported SAP service  
+↓  
+Define the NHB accounting handoff contract  
+↓  
+Implement `MurabahaAccountingEvent`  
+↓  
+Implement governed `postAccountingEvent` action  
+↓  
+Externalize accounting configuration  
+↓  
+Map NHB accounting events to a normalized journal-entry model  
+↓  
+Build the SAP synchronous SOAP request  
+↓  
+Implement local and SAP BTP Destination-aware transport  
+↓  
+Parse the SAP synchronous confirmation  
+↓  
+Implement `POSTED` and `FAILED` accounting-event outcomes  
+↓  
+Verify the complete application-side flow through automated regression
+
+The current verified application-side architecture is:
+
+MurabahaAccountingEvent  
+`postingStatus = PENDING`  
+↓  
+`postAccountingEvent`  
+↓  
+SAP accounting adapter  
+↓  
+Journal Entry SOAP request  
+↓  
+SAP transport  
+↓  
+SAP confirmation parser  
+↓  
+
+Confirmed accounting document → `POSTED` + `externalAccountingDocumentId`
+
+Posting failure → `FAILED` + `errorMessage`
+
+The next SAP milestone is therefore no longer to introduce the integration.
+
+It is to complete live SAP S/4HANA verification.
+
+The next steps are:
+
+1. Make the SAP S/4HANA laboratory environment available.
+2. Confirm that the synchronous Journal Entry service is active and accessible.
+3. Configure the required SAP communication arrangement.
+4. Configure and validate the SAP BTP Destination used by NHBCAP01.
+5. Confirm the required authentication and endpoint settings.
+6. Provide the approved test accounting configuration.
+7. Execute a controlled `PAYMENT_RECEIVED` posting.
+8. Confirm that SAP creates the accounting document.
+9. Confirm the returned accounting document number, company code, and fiscal year.
+10. Verify that NHBCAP01 persists `postingStatus = POSTED`.
+11. Verify that `externalAccountingDocumentId` contains the genuine SAP reference.
+12. Record the successful scenario as the live `SAP-T05` regression baseline.
+
+The live verification sequence should remain evidence-based:
+
+SAP service available  
+↓  
+Destination verified  
+↓  
+Independent SAP connectivity verified  
+↓  
+NHBCAP01 posting executed  
+↓  
+SAP document confirmed  
+↓  
+NHB posting state verified  
+↓  
+Regression evidence recorded  
+↓  
+Architecture documentation updated
+
+`PAYMENT_REVERSED` remains the next accounting integration increment after the normal payment-received posting path is externally verified.
+
+Its implementation must use a dedicated SAP reversal treatment rather than treating reversal as an unrelated normal journal entry.
+
+SAP cash-flow and liquidity integration should follow only after the accounting-posting baseline is stable and should use the same incremental verification approach.
 
 ### 15.6 Mature cross-cutting architecture
 

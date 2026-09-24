@@ -1,0 +1,143 @@
+const crypto = require('node:crypto');
+const {
+    parseJournalEntryResponse
+} = require('./journal-entry-response');
+
+const {
+    buildJournalEntrySoapRequest
+} = require('./journal-entry-soap');
+
+const {
+    postSoapRequest
+} = require('./transport');
+
+function validateAccountingConfig(accountingConfig) {
+    const requiredFields = [
+        'companyCode',
+        'documentType',
+        'businessTransactionType',
+        'createdByUser',
+        'debitAccount',
+        'creditAccount'
+    ];
+
+    for (const field of requiredFields) {
+        if (!accountingConfig?.[field]) {
+            throw new Error(
+                `Accounting configuration field ${field} is required`
+            );
+        }
+    }
+
+    return accountingConfig;
+}
+
+function mapAccountingEventToJournalEntry(
+    accountingEvent,
+    accountingConfig
+) {
+    if (!accountingEvent) {
+        throw new Error('Accounting event is required');
+    }
+
+    validateAccountingConfig(accountingConfig);
+
+    const amount = Number(accountingEvent.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error(
+            'Accounting event amount must be greater than zero'
+        );
+    }
+
+    if (!accountingEvent.eventDate) {
+        throw new Error('Accounting event date is required');
+    }
+
+    if (!accountingEvent.currency) {
+        throw new Error('Accounting event currency is required');
+    }
+
+    if (!accountingEvent.correlationId) {
+        throw new Error(
+            'Accounting event correlation ID is required'
+        );
+    }
+
+    if (
+        !['PAYMENT_RECEIVED', 'PAYMENT_REVERSED']
+            .includes(accountingEvent.eventType)
+    ) {
+        throw new Error(
+            `Unsupported accounting event type: ${accountingEvent.eventType}`
+        );
+    }
+
+    return {
+        eventType: accountingEvent.eventType,
+        companyCode: accountingConfig.companyCode,
+        documentType: accountingConfig.documentType,
+        businessTransactionType:
+            accountingConfig.businessTransactionType,
+        createdByUser: accountingConfig.createdByUser,
+        postingDate: accountingEvent.eventDate,
+        documentDate: accountingEvent.eventDate,
+        currency: accountingEvent.currency,
+        amount,
+        debitAccount: accountingConfig.debitAccount,
+        creditAccount: accountingConfig.creditAccount,
+        reference: accountingEvent.correlationId,
+        nhbAccountingEventId: accountingEvent.ID,
+        nhbPaymentId: accountingEvent.payment_ID,
+        nhbFinancingId: accountingEvent.financing_ID,
+        nhbInstallmentId: accountingEvent.installment_ID
+    };
+}
+
+function createSoapMessageContext() {
+    return {
+        serviceMessageId:
+            `NHB-${crypto.randomUUID()}`,
+        journalEntryMessageId:
+            `NHB-JE-${crypto.randomUUID()}`,
+        creationDateTime:
+            new Date().toISOString()
+    };
+}
+
+async function postJournalEntry(
+    accountingEvent,
+    accountingConfig,
+    options = {}
+) {
+    const journalEntry =
+        mapAccountingEventToJournalEntry(
+            accountingEvent,
+            accountingConfig
+        );
+
+    const messageContext =
+        options.messageContext ||
+        createSoapMessageContext();
+
+    const xml =
+        buildJournalEntrySoapRequest(
+            journalEntry,
+            messageContext
+        );
+
+    const responseXml = await postSoapRequest(
+        xml,
+        options.transportConfig,
+        options.httpExecutor
+    );
+
+    return parseJournalEntryResponse(responseXml);
+}
+
+module.exports = {
+    postJournalEntry,
+    validateAccountingConfig,
+    mapAccountingEventToJournalEntry,
+    createSoapMessageContext
+};
