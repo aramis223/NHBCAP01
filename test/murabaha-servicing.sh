@@ -8,6 +8,16 @@ trap 'rm -f "$RESPONSE_FILE"' EXIT
 TEST_DATE="${TEST_DATE:-2026-09-24}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)-$$}"
 
+AUTH_ARGS=()
+if [[ -n "${XSUAA_TOKEN:-}" ]]; then
+  AUTH_ARGS=(-H "Authorization: Bearer $XSUAA_TOKEN")
+fi
+
+http() {
+  curl "${AUTH_ARGS[@]}" "$@"
+}
+
+
 new_id() {
   node -e "console.log(require('crypto').randomUUID())"
 }
@@ -21,7 +31,7 @@ expect_status() {
 
   local actual
 
-  actual="$(curl -s \
+  actual="$(http -s \
     -o $RESPONSE_FILE \
     -w "%{http_code}" \
     -X "$method" \
@@ -42,7 +52,7 @@ create_financing() {
   local id="$1"
   local ref="$2"
 
-  curl -fsS -X POST \
+  http -fsS -X POST \
     -H "Content-Type: application/json" \
     -d "{
       \"ID\":\"$id\",
@@ -67,7 +77,7 @@ create_installment() {
   local sequence="$3"
   local due_date="$4"
 
-  curl -fsS -X POST \
+  http -fsS -X POST \
     -H "Content-Type: application/json" \
     -d "{
       \"ID\":\"$id\",
@@ -88,7 +98,7 @@ post_bound() {
   local id="$2"
   local payload="$3"
 
-  curl -fsS -X POST \
+  http -fsS -X POST \
     -H "Content-Type: application/json" \
     -d "$payload" \
     "$BASE_URL/MurabahaFinancing($id)/NHBCAP01Service.$action"
@@ -125,7 +135,7 @@ post_payment() {
   local external_id="$2"
   local amount="$3"
 
-  curl -fsS -X POST \
+  http -fsS -X POST \
     -H "Content-Type: application/json" \
     -d "{
       \"externalPaymentId\":\"$external_id\",
@@ -176,10 +186,10 @@ PAYMENT_1_ID="$(
   printf '%s' "$PAYMENT_1" | jq -r '.ID'
 )"
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaInstallment($INSTALLMENT_1)" \
   | jq -e '
-      .paidAmount == 400 and
+      (.paidAmount | tonumber) == 400 and
       .status == "PARTIALLY_PAID"
     ' >/dev/null
 
@@ -211,7 +221,7 @@ expect_status 409 \
 # ------------------------------------------------------------
 
 REVERSAL_1="$(
-  curl -fsS -X POST \
+  http -fsS -X POST \
     -H "Content-Type: application/json" \
     -d "{
       \"paymentId\":\"$PAYMENT_1_ID\",
@@ -225,17 +235,17 @@ REVERSAL_1="$(
 printf '%s' "$REVERSAL_1" \
   | jq -e --arg ref "REV-SVC-001-$RUN_ID" '
       .externalReversalId == $ref and
-      .amount == 400
+      (.amount | tonumber) == 400
     ' >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaInstallment($INSTALLMENT_1)" \
   | jq -e '
-      .paidAmount == 0 and
+      (.paidAmount | tonumber) == 0 and
       .status == "PENDING"
     ' >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaPayment($PAYMENT_1_ID)" \
   | jq -e '.status == "REVERSED"' >/dev/null
 
@@ -287,10 +297,10 @@ expect_status 409 \
 
 post_payment "$INSTALLMENT_1" "PAY-SVC-003-$RUN_ID" 1000 >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaInstallment($INSTALLMENT_1)" \
   | jq -e '
-      .paidAmount == 1100 and
+      (.paidAmount | tonumber) == 1100 and
       .status == "PAID"
     ' >/dev/null
 
@@ -304,7 +314,7 @@ post_bound markFinancingDefaulted "$FINANCING_ID" \
   "{\"defaultDate\":\"$TEST_DATE\",\"defaultReason\":\"Synthetic delinquency event\",\"defaultReference\":\"DEF-SVC-001-$RUN_ID\"}" \
   >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaFinancing($FINANCING_ID)" \
   | jq -e '.status == "DEFAULTED"' >/dev/null
 
@@ -316,10 +326,10 @@ echo "PASS: financing -> DEFAULTED"
 
 post_payment "$INSTALLMENT_2" "PAY-SVC-004-$RUN_ID" 500 >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaInstallment($INSTALLMENT_2)" \
   | jq -e '
-      .paidAmount == 500 and
+      (.paidAmount | tonumber) == 500 and
       .status == "PARTIALLY_PAID"
     ' >/dev/null
 
@@ -338,14 +348,14 @@ FINAL_PAYMENT_ID="$(
   printf '%s' "$FINAL_PAYMENT" | jq -r '.ID'
 )"
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaInstallment($INSTALLMENT_2)" \
   | jq -e '
-      .paidAmount == 1100 and
+      (.paidAmount | tonumber) == 1100 and
       .status == "PAID"
     ' >/dev/null
 
-curl -fsS \
+http -fsS \
   "$BASE_URL/MurabahaFinancing($FINANCING_ID)" \
   | jq -e '.status == "SETTLED"' >/dev/null
 
