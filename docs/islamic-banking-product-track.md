@@ -172,6 +172,32 @@ A future SAP S/4HANA integration can process these pending events and, after suc
 
 This baseline therefore establishes the NHB-side accounting integration boundary without claiming that SAP S/4HANA posting has already been implemented.
 
+### Cloud Foundry Verification
+
+The Murabaha servicing and accounting-event baseline was deployed to SAP BTP Cloud Foundry through the project MTA, including the HANA database deployer and `NHBCAP01-srv`.
+
+The deployed service was verified behind XSUAA using the same servicing regression used locally.
+
+The Cloud Foundry regression confirmed:
+
+- payment rejection before activation
+- financing activation
+- partial payment and `PARTIALLY_PAID` status
+- `PAYMENT_RECEIVED` accounting-event creation
+- duplicate external-payment-ID rejection
+- overpayment rejection
+- payment reversal before settlement
+- restoration of installment balance and payment status
+- `PAYMENT_REVERSED` accounting-event creation
+- prevention of duplicate reversal
+- prevention of duplicate external reversal reference
+- transition to `DEFAULTED`
+- valid servicing while `DEFAULTED`
+- automatic transition to `SETTLED`
+- rejection of ordinary reversal after settlement
+
+The deployed verification therefore confirms that the Murabaha servicing and NHB-owned accounting-handoff baseline behaves consistently across the local development environment and SAP BTP Cloud Foundry.
+
 ### Exceptional Lifecycle States
 
 Exceptional Murabaha states are governed through explicit bound actions rather than direct status changes.

@@ -467,6 +467,10 @@ Verified behaviors include:
 
 The test uses run-specific external references so it can be executed repeatedly against persistent local data without colliding with evidence from earlier runs.
 
+The same regression was subsequently executed against the deployed SAP BTP Cloud Foundry service behind XSUAA after deployment of the updated MTA, including the HANA database changes.
+
+The deployed regression passed the complete servicing baseline, including `PAYMENT_RECEIVED` and `PAYMENT_REVERSED` accounting-event verification. This establishes parity between the verified local behavior and the deployed NHBCAP01 runtime.
+
 ### 5.2 NHBCustomer abstraction
 
 `NHBCustomer` is defined as:
