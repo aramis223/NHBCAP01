@@ -16,12 +16,13 @@ test('parses a successful SAP journal-entry confirmation', () => {
                     <CompanyCode>NHB1</CompanyCode>
                     <FiscalYear>2026</FiscalYear>
                 </JournalEntryCreateConfirmation>
-                <Log>
-                    <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
-                    <Item>
-                        <Note>Journal entry posted successfully</Note>
-                    </Item>
-                </Log>
+                    <Log>
+                        <BusinessDocumentProcessingResultCode>3</BusinessDocumentProcessingResultCode>
+                        <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
+                        <Item>
+                            <Note>Journal entry posted successfully</Note>
+                        </Item>
+                    </Log>
             </JournalEntryCreateConfirmation>
         </JournalEntryBulkCreateConfirmation>
     </soap-env:Body>
@@ -36,7 +37,14 @@ test('parses a successful SAP journal-entry confirmation', () => {
     );
     assert.equal(result.companyCode, 'NHB1');
     assert.equal(result.fiscalYear, '2026');
-    assert.equal(result.maximumSeverity, '1');
+    assert.equal(
+        result.processingResultCode,
+        '3'
+    );
+    assert.equal(
+        result.maximumSeverity,
+        '1'
+    );
     assert.deepEqual(
         result.logNotes,
         ['Journal entry posted successfully']

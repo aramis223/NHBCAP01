@@ -2,6 +2,11 @@ const {
     executeHttpRequest
 } = require('@sap-cloud-sdk/http-client');
 
+const JOURNAL_ENTRY_SOAP_ACTION =
+    'http://sap.com/xi/SAPSCORE/SFIN/' +
+    'JournalEntryCreateRequestConfirmation_In/' +
+    'JournalEntryCreateRequestConfirmation_InRequest';
+
 function getSapTransportConfig() {
     const destinationName =
         process.env.SAP_JOURNAL_ENTRY_DESTINATION;
@@ -68,7 +73,9 @@ async function postSoapRequest(
                     headers: {
                         'Content-Type':
                             'text/xml; charset=utf-8',
-                        Accept: 'text/xml'
+                        Accept: 'text/xml',
+                        SOAPAction:
+                            JOURNAL_ENTRY_SOAP_ACTION
                     },
                     data: xml
                 }
@@ -91,7 +98,9 @@ async function postSoapRequest(
                     ),
                 'Content-Type':
                     'text/xml; charset=utf-8',
-                Accept: 'text/xml'
+                Accept: 'text/xml',
+                SOAPAction:
+                    JOURNAL_ENTRY_SOAP_ACTION
             },
             body: xml
         }
@@ -109,6 +118,7 @@ async function postSoapRequest(
 }
 
 module.exports = {
+    JOURNAL_ENTRY_SOAP_ACTION,
     getSapTransportConfig,
     buildBasicAuthorization,
     postSoapRequest

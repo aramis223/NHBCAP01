@@ -41,6 +41,27 @@ function validateJournalEntry(journalEntry) {
         );
     }
 
+    const maxLengths = {
+        companyCode: 4,
+        documentType: 5,
+        businessTransactionType: 4,
+        createdByUser: 12,
+        reference: 16
+    };
+
+    for (const [field, maxLength] of Object.entries(maxLengths)) {
+        if (String(journalEntry[field]).length > maxLength) {
+            throw new Error(
+                `Journal entry field ${field} exceeds SAP maximum length ${maxLength}`
+            );
+        }
+    }
+
+    if (String(journalEntry.currency).length !== 3) {
+        throw new Error(
+            'Journal entry currency must be exactly 3 characters'
+        );
+    }
     const amount = Number(journalEntry.amount);
 
     if (!Number.isFinite(amount) || amount <= 0) {

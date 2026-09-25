@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+    JOURNAL_ENTRY_SOAP_ACTION,
     getSapTransportConfig,
     buildBasicAuthorization,
     postSoapRequest
@@ -127,6 +128,11 @@ test('posts SOAP XML using basic transport and returns raw response text', async
             options.headers.Accept,
             'text/xml'
         );
+
+        assert.equal(
+            options.headers.SOAPAction,
+            JOURNAL_ENTRY_SOAP_ACTION
+        );
         assert.equal(
             options.body,
             '<soap>test</soap>'
@@ -207,6 +213,10 @@ test('posts SOAP XML using SAP destination transport', async () => {
         assert.equal(
             request.headers.Accept,
             'text/xml'
+        );
+        assert.equal(
+            request.headers.SOAPAction,
+            JOURNAL_ENTRY_SOAP_ACTION
         );
         assert.equal(
             request.data,

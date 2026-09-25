@@ -71,6 +71,51 @@ test('rejects an invalid journal-entry amount', () => {
     );
 });
 
+test('rejects a SAP document reference longer than 16 characters', () => {
+    assert.throws(
+        () => validateJournalEntry({
+            ...validJournalEntry,
+            reference: 'PAY-SVC-TEST-001X'
+        }),
+        /reference exceeds SAP maximum length 16/i
+    );
+});
+
+test('rejects invalid SAP field lengths', () => {
+    assert.throws(
+        () => validateJournalEntry({
+            ...validJournalEntry,
+            companyCode: 'NHB01'
+        }),
+        /companyCode exceeds SAP maximum length 4/i
+    );
+
+    assert.throws(
+        () => validateJournalEntry({
+            ...validJournalEntry,
+            businessTransactionType: 'RFBU1'
+        }),
+        /businessTransactionType exceeds SAP maximum length 4/i
+    );
+
+    assert.throws(
+        () => validateJournalEntry({
+            ...validJournalEntry,
+            createdByUser: 'NHBCAP01-USER'
+        }),
+        /createdByUser exceeds SAP maximum length 12/i
+    );
+});
+
+test('rejects a currency that is not exactly 3 characters', () => {
+    assert.throws(
+        () => validateJournalEntry({
+            ...validJournalEntry,
+            currency: 'US'
+        }),
+        /currency must be exactly 3 characters/i
+    );
+});
 test('builds the synchronous SAP journal-entry SOAP structure', () => {
     const xml =
         buildJournalEntrySoapRequest(

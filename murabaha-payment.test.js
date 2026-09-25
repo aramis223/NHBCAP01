@@ -239,7 +239,7 @@ test('marks a pending accounting event FAILED when SAP posting fails', async () 
 });
 
 test('marks a pending accounting event POSTED when SAP confirms posting', async () => {
-  const reference = 'TEST-AUTO-ACCOUNTING-SUCCESS-001';
+  const reference = 'AUTO-SAP-OK-001';
 
   const originalFetch = global.fetch;
   const originalDestination =

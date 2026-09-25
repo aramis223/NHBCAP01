@@ -84,6 +84,12 @@ function parseJournalEntryResponse(xml) {
             'MaximumLogItemSeverityCode'
         );
 
+    const processingResultCode =
+        extractFirst(
+            responseXml,
+            'BusinessDocumentProcessingResultCode'
+        );
+
     const logNotes =
         extractLogNotes(responseXml);
 
@@ -111,6 +117,7 @@ function parseJournalEntryResponse(xml) {
         accountingDocument,
         companyCode,
         fiscalYear,
+        processingResultCode,
         maximumSeverity,
         logNotes,
         externalAccountingDocumentId:
