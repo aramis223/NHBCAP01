@@ -2,11 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    postJournalEntry
+    postJournalEntry,
+    postJournalEntryReversal,
+    validateAccountingReversalConfig,
+    mapAccountingEventToJournalEntryReversal
 } = require('./srv/sap/accounting');
 
 const {
-    getAccountingConfig
+    getAccountingConfig,
+    getAccountingReversalConfig
 } = require('./srv/sap/config');
 
 const {
@@ -33,6 +37,27 @@ const validEvent = {
     payment_ID: '22222222-2222-2222-2222-222222222222',
     financing_ID: '33333333-3333-3333-3333-333333333333',
     installment_ID: '44444444-4444-4444-4444-444444444444'
+};
+
+const validReversalConfig = {
+    companyCode: 'NHB1',
+    documentType: 'SA',
+    businessTransactionType: 'RFBU',
+    createdByUser: 'NHBCAP01',
+    reversalReason: '01'
+};
+
+const validReversalEvent = {
+    ...validEvent,
+    eventType: 'PAYMENT_REVERSED',
+    eventDate: '2026-09-25',
+    correlationId: 'REV-SVC-TEST-001'
+};
+
+const originalPosting = {
+    externalAccountingDocument: '1900000123',
+    externalCompanyCode: 'NHB1',
+    externalFiscalYear: '2026'
 };
 
 test('validates complete accounting configuration', () => {
@@ -311,4 +336,220 @@ test('orchestrates accounting mapping, SOAP building, and transport', async () =
         'NHB1-2026-1900000123'
     );
 
+});
+
+test(
+    'loads SAP accounting reversal configuration from environment',
+    () => {
+        process.env.SAP_ACCOUNTING_COMPANY_CODE =
+            'NHB1';
+        process.env.SAP_ACCOUNTING_DOCUMENT_TYPE =
+            'SA';
+        process.env.SAP_ACCOUNTING_BUSINESS_TRANSACTION_TYPE =
+            'RFBU';
+        process.env.SAP_ACCOUNTING_CREATED_BY_USER =
+            'NHBCAP01';
+        process.env.SAP_ACCOUNTING_REVERSAL_REASON =
+            '01';
+
+        const config =
+            getAccountingReversalConfig();
+
+        assert.equal(config.companyCode, 'NHB1');
+        assert.equal(config.documentType, 'SA');
+        assert.equal(
+            config.businessTransactionType,
+            'RFBU'
+        );
+        assert.equal(
+            config.createdByUser,
+            'NHBCAP01'
+        );
+        assert.equal(
+            config.reversalReason,
+            '01'
+        );
+    }
+);
+
+test(
+    'rejects invalid SAP accounting reversal configuration',
+    () => {
+        const original =
+            process.env.SAP_ACCOUNTING_REVERSAL_REASON;
+
+        process.env.SAP_ACCOUNTING_REVERSAL_REASON =
+            '001';
+
+        assert.throws(
+            () => getAccountingReversalConfig(),
+            /reversal reason exceeds maximum length 2/i
+        );
+
+        if (original === undefined) {
+            delete process.env
+                .SAP_ACCOUNTING_REVERSAL_REASON;
+        } else {
+            process.env
+                .SAP_ACCOUNTING_REVERSAL_REASON =
+                original;
+        }
+    }
+);
+
+test('validates complete accounting reversal configuration', () => {
+    const result =
+        validateAccountingReversalConfig(
+            validReversalConfig
+        );
+
+    assert.deepEqual(
+        result,
+        validReversalConfig
+    );
+});
+
+test('maps PAYMENT_REVERSED to SAP reversal candidate', () => {
+    const result =
+        mapAccountingEventToJournalEntryReversal(
+            validReversalEvent,
+            validReversalConfig,
+            originalPosting
+        );
+
+    assert.equal(
+        result.eventType,
+        'PAYMENT_REVERSED'
+    );
+    assert.equal(
+        result.companyCode,
+        'NHB1'
+    );
+    assert.equal(
+        result.reversalReason,
+        '01'
+    );
+    assert.equal(
+        result.reversalReferenceDocument,
+        '1900000123NHB12026'
+    );
+    assert.equal(
+        result.reversalDate,
+        '2026-09-25'
+    );
+});
+
+test('rejects reversal without original SAP document identity', () => {
+    assert.throws(
+        () =>
+            mapAccountingEventToJournalEntryReversal(
+                validReversalEvent,
+                validReversalConfig,
+                {}
+            ),
+        /original SAP accounting document identity is required/i
+    );
+});
+
+test('rejects reversal when SAP company code does not match', () => {
+    assert.throws(
+        () =>
+            mapAccountingEventToJournalEntryReversal(
+                validReversalEvent,
+                validReversalConfig,
+                {
+                    ...originalPosting,
+                    externalCompanyCode: 'TEST'
+                }
+            ),
+        /company code does not match/i
+    );
+});
+
+test('orchestrates SAP journal-entry reversal', async () => {
+    const fakeHttpExecutor = async (
+        destination,
+        request
+    ) => {
+        assert.deepEqual(destination, {
+            destinationName:
+                'NHB-S4-JOURNAL'
+        });
+
+        assert.equal(
+            request.method,
+            'POST'
+        );
+
+        assert.match(
+            request.data,
+            /<ReversalReason>01<\/ReversalReason>/
+        );
+
+        assert.match(
+            request.data,
+            /<ReversalReferenceDocument>1900000123NHB12026<\/ReversalReferenceDocument>/
+        );
+
+        assert.doesNotMatch(
+            request.data,
+            /<Item>/
+        );
+
+        return {
+            data: `
+                <JournalEntryBulkCreateConfirmation>
+                    <JournalEntryCreateConfirmation>
+                        <AccountingDocument>1900000456</AccountingDocument>
+                        <CompanyCode>NHB1</CompanyCode>
+                        <FiscalYear>2026</FiscalYear>
+                        <Log>
+                            <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
+                            <Item>
+                                <Note>Journal entry reversed successfully</Note>
+                            </Item>
+                        </Log>
+                    </JournalEntryCreateConfirmation>
+                </JournalEntryBulkCreateConfirmation>`
+        };
+    };
+
+    const result =
+        await postJournalEntryReversal(
+            validReversalEvent,
+            validReversalConfig,
+            originalPosting,
+            {
+                messageContext: {
+                    serviceMessageId:
+                        'SERVICE-REV-001',
+                    journalEntryMessageId:
+                        'JE-REV-001',
+                    creationDateTime:
+                        '2026-09-25T12:00:00Z'
+                },
+                transportConfig: {
+                    mode: 'destination',
+                    destinationName:
+                        'NHB-S4-JOURNAL'
+                },
+                httpExecutor:
+                    fakeHttpExecutor
+            }
+        );
+
+    assert.equal(
+        result.success,
+        true
+    );
+
+    assert.equal(
+        result.accountingDocument,
+        '1900000456'
+    );
+
+    assert.equal(
+        result.externalAccountingDocumentId,
+        'NHB1-2026-1900000456'
+    );
 });

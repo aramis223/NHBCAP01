@@ -8,6 +8,10 @@ const {
 } = require('./journal-entry-soap');
 
 const {
+    buildJournalEntryReversalSoapRequest
+} = require('./journal-entry-reversal-soap');
+
+const {
     postSoapRequest
 } = require('./transport');
 
@@ -94,6 +98,98 @@ function mapAccountingEventToJournalEntry(
     };
 }
 
+function validateAccountingReversalConfig(accountingConfig) {
+    const requiredFields = [
+        'companyCode',
+        'documentType',
+        'businessTransactionType',
+        'createdByUser',
+        'reversalReason'
+    ];
+
+    for (const field of requiredFields) {
+        if (!accountingConfig?.[field]) {
+            throw new Error(
+                `Accounting reversal configuration field ${field} is required`
+            );
+        }
+    }
+
+    return accountingConfig;
+}
+
+function mapAccountingEventToJournalEntryReversal(
+    accountingEvent,
+    accountingConfig,
+    originalPosting
+) {
+    if (!accountingEvent) {
+        throw new Error(
+            'Accounting reversal event is required'
+        );
+    }
+
+    if (accountingEvent.eventType !== 'PAYMENT_REVERSED') {
+        throw new Error(
+            `Unsupported accounting reversal event type: ${accountingEvent.eventType}`
+        );
+    }
+
+    if (!accountingEvent.eventDate) {
+        throw new Error(
+            'Accounting reversal event date is required'
+        );
+    }
+
+    validateAccountingReversalConfig(
+        accountingConfig
+    );
+
+    if (
+        !originalPosting?.externalAccountingDocument ||
+        !originalPosting?.externalCompanyCode ||
+        !originalPosting?.externalFiscalYear
+    ) {
+        throw new Error(
+            'Original SAP accounting document identity is required for reversal'
+        );
+    }
+
+    if (
+        originalPosting.externalCompanyCode !==
+        accountingConfig.companyCode
+    ) {
+        throw new Error(
+            'Original SAP company code does not match reversal configuration'
+        );
+    }
+
+    const reversalReferenceDocument =
+        `${originalPosting.externalAccountingDocument}` +
+        `${originalPosting.externalCompanyCode}` +
+        `${originalPosting.externalFiscalYear}`;
+
+    return {
+        eventType: accountingEvent.eventType,
+        companyCode: accountingConfig.companyCode,
+        documentType: accountingConfig.documentType,
+        businessTransactionType:
+            accountingConfig.businessTransactionType,
+        createdByUser:
+            accountingConfig.createdByUser,
+        documentDate: accountingEvent.eventDate,
+        postingDate: accountingEvent.eventDate,
+        reversalDate: accountingEvent.eventDate,
+        reversalReason:
+            accountingConfig.reversalReason,
+        reversalReferenceDocument,
+        nhbAccountingEventId:
+            accountingEvent.ID,
+        nhbPaymentId:
+            accountingEvent.payment_ID
+    };
+}
+
 function createSoapMessageContext() {
     return {
         serviceMessageId:
@@ -135,9 +231,47 @@ async function postJournalEntry(
     return parseJournalEntryResponse(responseXml);
 }
 
+async function postJournalEntryReversal(
+    accountingEvent,
+    accountingConfig,
+    originalPosting,
+    options = {}
+) {
+    const reversal =
+        mapAccountingEventToJournalEntryReversal(
+            accountingEvent,
+            accountingConfig,
+            originalPosting
+        );
+
+    const messageContext =
+        options.messageContext ||
+        createSoapMessageContext();
+
+    const xml =
+        buildJournalEntryReversalSoapRequest(
+            reversal,
+            messageContext
+        );
+
+    const responseXml =
+        await postSoapRequest(
+            xml,
+            options.transportConfig,
+            options.httpExecutor
+        );
+
+    return parseJournalEntryResponse(
+        responseXml
+    );
+}
+
 module.exports = {
     postJournalEntry,
+    postJournalEntryReversal,
     validateAccountingConfig,
+    validateAccountingReversalConfig,
     mapAccountingEventToJournalEntry,
+    mapAccountingEventToJournalEntryReversal,
     createSoapMessageContext
 };

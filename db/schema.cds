@@ -107,6 +107,10 @@ entity MurabahaAccountingEvent : cuid, managed {
     currency                     : String(3) not null;
     correlationId                : String(100) not null;
     postingStatus                : String(30) default 'PENDING';
+
+    externalAccountingDocument   : String(10);
+    externalCompanyCode          : String(4);
+    externalFiscalYear           : String(4);
     externalAccountingDocumentId : String(100);
     errorMessage                 : String(500);
 }

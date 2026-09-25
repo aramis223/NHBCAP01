@@ -4,6 +4,7 @@ process.env.SAP_ACCOUNTING_DEBIT_ACCOUNT = 'TEST-DEBIT';
 process.env.SAP_ACCOUNTING_CREDIT_ACCOUNT = 'TEST-CREDIT';
 process.env.SAP_ACCOUNTING_BUSINESS_TRANSACTION_TYPE = 'RFBU';
 process.env.SAP_ACCOUNTING_CREATED_BY_USER = 'NHBCAP01';
+process.env.SAP_ACCOUNTING_REVERSAL_REASON = '01';
 
 const cds = require('@sap/cds');
 const assert = require('node:assert/strict');
@@ -240,7 +241,6 @@ test('marks a pending accounting event FAILED when SAP posting fails', async () 
 
 test('marks a pending accounting event POSTED when SAP confirms posting', async () => {
   const reference = 'AUTO-SAP-OK-001';
-
   const originalFetch = global.fetch;
   const originalDestination =
     process.env.SAP_JOURNAL_ENTRY_DESTINATION;
@@ -264,21 +264,20 @@ test('marks a pending accounting event POSTED when SAP confirms posting', async 
     ok: true,
     status: 200,
     text: async () => `
-<JournalEntryBulkCreateConfirmation>
-    <JournalEntryCreateConfirmation>
-        <AccountingDocument>1900000123</AccountingDocument>
-        <CompanyCode>NHB1</CompanyCode>
-        <FiscalYear>2026</FiscalYear>
-        <Log>
-            <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
-            <Item>
-                <Note>Journal entry posted successfully</Note>
-            </Item>
-        </Log>
-    </JournalEntryCreateConfirmation>
-</JournalEntryBulkCreateConfirmation>`
-  });
-
+        <JournalEntryBulkCreateConfirmation>
+            <JournalEntryCreateConfirmation>
+                <AccountingDocument>1900000123</AccountingDocument>
+                <CompanyCode>NHB1</CompanyCode>
+                <FiscalYear>2026</FiscalYear>
+                <Log>
+                    <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
+                    <Item>
+                        <Note>Journal entry posted successfully</Note>
+                    </Item>
+                </Log>
+            </JournalEntryCreateConfirmation>
+        </JournalEntryBulkCreateConfirmation>`
+});
   try {
     await postPayment(reference, 1000);
 
@@ -293,7 +292,18 @@ test('marks a pending accounting event POSTED when SAP confirms posting', async 
 
     const result =
       await postAccountingEvent(event.ID);
-
+    assert.equal(
+      result.externalAccountingDocument,
+      '1900000123'
+    );
+    assert.equal(
+      result.externalCompanyCode,
+      'NHB1'
+    );
+    assert.equal(
+      result.externalFiscalYear,
+      '2026'
+    );
     assert.equal(result.ID, event.ID);
     assert.equal(
       result.postingStatus,
@@ -307,14 +317,21 @@ test('marks a pending accounting event POSTED when SAP confirms posting', async 
 
     const after =
       await accountingEventByCorrelation(reference);
-
     assert.equal(
       after.postingStatus,
       'POSTED'
     );
     assert.equal(
-      after.externalAccountingDocumentId,
-      'NHB1-2026-1900000123'
+      result.externalAccountingDocument,
+      '1900000123'
+    );
+    assert.equal(
+      result.externalCompanyCode,
+      'NHB1'
+    );
+    assert.equal(
+      result.externalFiscalYear,
+      '2026'
     );
     assert.equal(after.errorMessage, null);
 
@@ -399,4 +416,209 @@ test('rejects an accounting event that is no longer pending', async () => {
     () => postAccountingEvent(event.ID),
     /only a pending accounting event can be submitted for posting/i
   );
+});
+
+test('marks a reversal accounting event POSTED when SAP confirms reversal', async () => {
+  const paymentReference = 'REV-SAP-PAY-001';
+  const reversalReference = 'REV-SAP-001';
+
+  const originalFetch = global.fetch;
+  const originalDestination =
+    process.env.SAP_JOURNAL_ENTRY_DESTINATION;
+  const originalEndpoint =
+    process.env.SAP_JOURNAL_ENTRY_ENDPOINT_URL;
+  const originalUsername =
+    process.env.SAP_JOURNAL_ENTRY_USERNAME;
+  const originalPassword =
+    process.env.SAP_JOURNAL_ENTRY_PASSWORD;
+
+  delete process.env.SAP_JOURNAL_ENTRY_DESTINATION;
+
+  process.env.SAP_JOURNAL_ENTRY_ENDPOINT_URL =
+    'https://example.test/sap/journal-entry';
+  process.env.SAP_JOURNAL_ENTRY_USERNAME =
+    'user';
+  process.env.SAP_JOURNAL_ENTRY_PASSWORD =
+    'secret';
+
+  try {
+    const payment =
+      await postPayment(
+        paymentReference,
+        1000
+      );
+
+    const originalEvent =
+      await accountingEventByCorrelation(
+        paymentReference
+      );
+
+    assert.ok(originalEvent);
+
+    const db =
+      await cds.connect.to('db');
+
+    const {
+      MurabahaAccountingEvent
+    } = cds.entities('NHBCAP01');
+
+    await db.run(
+      cds.ql.UPDATE(
+        MurabahaAccountingEvent
+      )
+        .set({
+          postingStatus: 'POSTED',
+          externalAccountingDocument:
+            '1900000123',
+          externalCompanyCode:
+            'NHB1',
+          externalFiscalYear:
+            '2026',
+          externalAccountingDocumentId:
+            'NHB1-2026-1900000123'
+        })
+        .where({
+          ID: originalEvent.ID
+        })
+    );
+
+    await reversePayment(
+      payment.ID,
+      reversalReference
+    );
+
+    const reversalEvent =
+      await accountingEventByCorrelation(
+        reversalReference
+      );
+
+    assert.ok(reversalEvent);
+    assert.equal(
+      reversalEvent.eventType,
+      'PAYMENT_REVERSED'
+    );
+    assert.equal(
+      reversalEvent.postingStatus,
+      'PENDING'
+    );
+
+    global.fetch = async (
+      url,
+      options
+    ) => {
+      assert.equal(
+        url,
+        'https://example.test/sap/journal-entry'
+      );
+
+      assert.match(
+        options.body,
+        /<ReversalReason>01<\/ReversalReason>/
+      );
+
+      assert.match(
+        options.body,
+        /<ReversalReferenceDocument>1900000123NHB12026<\/ReversalReferenceDocument>/
+      );
+
+      assert.doesNotMatch(
+        options.body,
+        /<Item>/
+      );
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `
+                    <JournalEntryBulkCreateConfirmation>
+                        <JournalEntryCreateConfirmation>
+                            <AccountingDocument>1900000456</AccountingDocument>
+                            <CompanyCode>NHB1</CompanyCode>
+                            <FiscalYear>2026</FiscalYear>
+                            <Log>
+                                <MaximumLogItemSeverityCode>1</MaximumLogItemSeverityCode>
+                                <Item>
+                                    <Note>Journal entry reversed successfully</Note>
+                                </Item>
+                            </Log>
+                        </JournalEntryCreateConfirmation>
+                    </JournalEntryBulkCreateConfirmation>`
+      };
+    };
+
+    const result =
+      await postAccountingEvent(
+        reversalEvent.ID
+      );
+
+    assert.equal(
+      result.postingStatus,
+      'POSTED',
+      `Reversal posting failed: ${result.errorMessage}`
+    );
+
+    assert.equal(
+      result.externalAccountingDocument,
+      '1900000456'
+    );
+
+    assert.equal(
+      result.externalCompanyCode,
+      'NHB1'
+    );
+
+    assert.equal(
+      result.externalFiscalYear,
+      '2026'
+    );
+
+    assert.equal(
+      result.externalAccountingDocumentId,
+      'NHB1-2026-1900000456'
+    );
+
+    assert.equal(
+      result.errorMessage,
+      null
+    );
+
+  } finally {
+    global.fetch = originalFetch;
+
+    if (originalDestination === undefined) {
+      delete process.env
+        .SAP_JOURNAL_ENTRY_DESTINATION;
+    } else {
+      process.env
+        .SAP_JOURNAL_ENTRY_DESTINATION =
+        originalDestination;
+    }
+
+    if (originalEndpoint === undefined) {
+      delete process.env
+        .SAP_JOURNAL_ENTRY_ENDPOINT_URL;
+    } else {
+      process.env
+        .SAP_JOURNAL_ENTRY_ENDPOINT_URL =
+        originalEndpoint;
+    }
+
+    if (originalUsername === undefined) {
+      delete process.env
+        .SAP_JOURNAL_ENTRY_USERNAME;
+    } else {
+      process.env
+        .SAP_JOURNAL_ENTRY_USERNAME =
+        originalUsername;
+    }
+
+    if (originalPassword === undefined) {
+      delete process.env
+        .SAP_JOURNAL_ENTRY_PASSWORD;
+    } else {
+      process.env
+        .SAP_JOURNAL_ENTRY_PASSWORD =
+        orignalPassword;
+    }
+  }
 });
