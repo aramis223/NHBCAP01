@@ -168,7 +168,7 @@ The payment or reversal state change and its corresponding accounting event are 
 
 NHBCAP01 now provides a governed accounting-posting operation through `postAccountingEvent(accountingEventId)`.
 
-For the current normal posting path, `postAccountingEvent` supports `PAYMENT_RECEIVED`.
+The governed accounting-posting operation supports both `PAYMENT_RECEIVED` and `PAYMENT_REVERSED`.
 
 The operation:
 
@@ -176,16 +176,18 @@ The operation:
 - verifies that the event exists
 - verifies that `postingStatus` is `PENDING`
 - validates the accounting-event data
-- resolves NHB accounting configuration
-- maps the event to a normalized journal-entry candidate
-- builds the SAP synchronous Journal Entry SOAP request
+- selects the applicable normal-posting or reversal path
+- resolves the required NHB accounting configuration
+- maps the event to the applicable normalized SAP request model
+- builds the corresponding SAP synchronous Journal Entry SOAP request
 - invokes the configured SAP transport
 - parses the SAP synchronous confirmation
-- records the SAP accounting-document reference on success
+- records the SAP-native accounting-document identity on success
 - records normalized failure information when posting fails
 
-The current posting lifecycle is:
-```
+The current accounting lifecycle is:
+
+```text
 MurabahaAccountingEvent
 postingStatus = PENDING
         │
@@ -196,13 +198,38 @@ postAccountingEvent
 Validate accounting event
         │
         ▼
-Resolve accounting configuration
+Select accounting path
         │
-        ▼
-Map normalized journal entry
+        ├── PAYMENT_RECEIVED
+        │        │
+        │        ▼
+        │   Resolve normal accounting configuration
+        │        │
+        │        ▼
+        │   Map normalized journal-entry candidate
+        │        │
+        │        ▼
+        │   Build normal SAP Journal Entry SOAP request
         │
-        ▼
-Build SAP SOAP request
+        └── PAYMENT_REVERSED
+                 │
+                 ▼
+            Load original PAYMENT_RECEIVED event
+                 │
+                 ▼
+            Verify original event is POSTED
+                 │
+                 ▼
+            Resolve original SAP document identity
+                 │
+                 ▼
+            Resolve reversal configuration
+                 │
+                 ▼
+            Map normalized reversal candidate
+                 │
+                 ▼
+            Build dedicated SAP reversal SOAP request
         │
         ▼
 Invoke SAP transport
@@ -210,48 +237,83 @@ Invoke SAP transport
         ▼
 Parse SAP confirmation
         │
-        ├──────── SAP confirmed ────────► POSTED
-        │                               │
-        │                               └─ externalAccountingDocumentId
+        ├── SAP confirmed
+        │        │
+        │        ▼
+        │      POSTED
+        │        +
+        │ SAP document identity
         │
-        └──────── SAP failed ───────────► FAILED
-                                        │
-                                        └─ errorMessage
+        └── SAP / transport / SOAP / response failure
+                 │
+                 ▼
+               FAILED
+                 +
+            errorMessage
 ```
-Posting, transport, SOAP, or response failure → `FAILED` + `errorMessage`
 
-A successful HTTP response alone is not treated as a successful accounting posting.
+A successful HTTP response alone is not treated as successful accounting posting.
 
 NHBCAP01 requires the SAP synchronous confirmation to contain a valid accounting document together with company code and fiscal year before the accounting event is changed to `postingStatus = POSTED`.
 
-The normalized external SAP reference is currently stored in the form `CompanyCode-FiscalYear-AccountingDocument`.
+For successful normal posting and reversal, NHBCAP01 persists:
 
-For example: `NHB1-2026-1900000123`.
+- `externalAccountingDocument`
+- `externalCompanyCode`
+- `externalFiscalYear`
+- `externalAccountingDocumentId`
+
+The normalized external SAP reference is stored in the form:
+
+```text
+CompanyCode-FiscalYear-AccountingDocument
+```
+
+For example:
+
+```text
+NHB1-2026-1900000123
+```
+
+For `PAYMENT_REVERSED`, NHBCAP01 retrieves the corresponding original `PAYMENT_RECEIVED` accounting event and requires that it has already been successfully posted.
+
+The reversal path uses the original SAP-native accounting identity to derive `ReversalReferenceDocument`.
+
+The dedicated reversal request uses:
+
+- `ReversalReason`
+- `ReversalReferenceDocument`
+- `ReversalDate`
+
+The reversal request deliberately does not contain normal debit/credit `<Item>` elements.
+
+The operational reversal reason stored in the Murabaha domain remains separate from the SAP-configured `ReversalReason` code.
 
 If a posting attempt begins but fails because of transport, SOAP processing, SAP response validation, or SAP business validation, NHBCAP01 records `postingStatus = FAILED` together with normalized failure information in `errorMessage`.
 
 This failure state is persisted as accounting audit evidence.
 
-If required accounting or transport configuration is unavailable before the SAP posting attempt begins, the event is not falsely marked as a failed SAP posting.
-
-`PAYMENT_REVERSED` events are intentionally excluded from the normal payment-received posting path.
-
-They remain `postingStatus = PENDING` until the dedicated SAP reversal contract is implemented and verified.
+If required accounting or transport configuration is unavailable before the SAP posting attempt begins, the event is not falsely marked as a failed SAP posting and remains `PENDING`.
 
 The current SAP accounting integration is separated under:
 
-`srv/sap/accounting.js`  
-`srv/sap/config.js`  
-`srv/sap/journal-entry-soap.js`  
-`srv/sap/journal-entry-response.js`  
-`srv/sap/transport.js`
+```text
+srv/sap/
+├── accounting.js
+├── config.js
+├── journal-entry-soap.js
+├── journal-entry-reversal-soap.js
+├── journal-entry-response.js
+└── transport.js
+```
 
 The implementation separates:
 
-- accounting configuration
+- normal-posting and reversal accounting configuration
 - NHB accounting-event mapping
-- SAP SOAP request construction
-- HTTP transport
+- normal SAP SOAP request construction
+- dedicated reversal SOAP request construction
+- shared HTTP transport
 - SAP confirmation parsing
 - CAP posting-state persistence
 
@@ -260,13 +322,26 @@ The transport supports both:
 - explicit endpoint and Basic Authentication for controlled local/test execution
 - SAP BTP Destination-based execution through the SAP Cloud SDK
 
-The posting path is currently verified through isolated SAP-layer tests and CAP-level regression using controlled SAP responses.
+The application-side SAP accounting path is verified through isolated SAP-layer tests and CAP-level regression using controlled SAP responses.
 
-The verified CAP-level outcomes include `PENDING → POSTED` with persisted `externalAccountingDocumentId`, and `PENDING → FAILED` with persisted `errorMessage`.
+Current verified regression baseline:
 
-Live posting against the deployed SAP S/4HANA laboratory environment remains the external verification milestone.
+- SAP accounting/integration suite: **43 passed, 0 failed**
+- Murabaha servicing/accounting suite: **14 passed, 0 failed**
 
-This baseline therefore establishes an implemented NHB-to-SAP accounting-posting boundary without overstating live SAP verification.
+The verified CAP-level outcomes include:
+
+- `PENDING → POSTED` for normal posting
+- `PENDING → POSTED` for reversal posting
+- persistence of the SAP-native accounting-document identity
+- `PENDING → FAILED`
+- persistence of `errorMessage`
+- original-posting lookup for reversal
+- validation of original SAP document identity
+
+Live SAP S/4HANA execution remains the external verification milestone for both normal posting and reversal.
+
+This baseline therefore establishes an implemented NHB-to-SAP accounting boundary for both payment posting and payment reversal without overstating live SAP verification.
 
 ### Cloud Foundry Verification
 
@@ -507,11 +582,16 @@ The servicing baseline has been verified locally and on SAP BTP Cloud Foundry be
 
 ### SAP Accounting Integration Baseline
 
-The SAP accounting layer now includes:
+The SAP accounting layer now includes both normal payment posting and payment reversal.
+
+The implemented capabilities include:
 
 - externalized NHB accounting configuration
+- dedicated reversal accounting configuration
 - normalized NHB-to-SAP journal-entry mapping
+- normalized NHB-to-SAP reversal mapping
 - synchronous SAP Journal Entry SOAP request construction
+- dedicated SAP reversal SOAP request construction
 - SOAP message-header generation
 - XML-safe request serialization
 - explicit local/test Basic Authentication transport
@@ -521,12 +601,20 @@ The SAP accounting layer now includes:
 - SOAP Fault handling
 - SAP business-failure detection
 - normalized SAP accounting-document identification
-- `PENDING → POSTED` state transition
-- persistence of `externalAccountingDocumentId`
+- persistence of SAP-native accounting-document identity
+- `PENDING → POSTED` state transition for normal posting
+- `PENDING → POSTED` state transition for reversal posting
 - `PENDING → FAILED` state transition
 - persistence of normalized `errorMessage`
 
-The implemented posting flow is:
+For successful normal posting and reversal, NHBCAP01 persists:
+
+- `externalAccountingDocument`
+- `externalCompanyCode`
+- `externalFiscalYear`
+- `externalAccountingDocumentId`
+
+The implemented accounting flow is:
 
 ```text
 MurabahaAccountingEvent
@@ -539,13 +627,38 @@ postAccountingEvent
 Validate accounting event
         │
         ▼
-Resolve NHB accounting configuration
+Select accounting path
         │
-        ▼
-Map normalized journal entry
+        ├── PAYMENT_RECEIVED
+        │        │
+        │        ▼
+        │   Resolve normal accounting configuration
+        │        │
+        │        ▼
+        │   Map normalized journal-entry candidate
+        │        │
+        │        ▼
+        │   Build normal SAP synchronous SOAP request
         │
-        ▼
-Build SAP synchronous SOAP request
+        └── PAYMENT_REVERSED
+                 │
+                 ▼
+            Load original PAYMENT_RECEIVED event
+                 │
+                 ▼
+            Verify original event is POSTED
+                 │
+                 ▼
+            Resolve original SAP document identity
+                 │
+                 ▼
+            Resolve reversal configuration
+                 │
+                 ▼
+            Map normalized reversal candidate
+                 │
+                 ▼
+            Build dedicated SAP reversal SOAP request
         │
         ▼
 Invoke SAP transport
@@ -553,18 +666,49 @@ Invoke SAP transport
         ▼
 Parse SAP confirmation
         │
-        ├──── SAP confirmed ────► POSTED
-        │                         │
-        │                         └── externalAccountingDocumentId
+        ├── SAP confirmed
+        │        │
+        │        ▼
+        │      POSTED
+        │        +
+        │ SAP document identity
         │
-        └──── SAP failed ───────► FAILED
-                                  │
-                                  └── errorMessage
+        └── SAP / transport / SOAP / response failure
+                 │
+                 ▼
+               FAILED
+                 +
+            errorMessage
 ```
 
 A successful HTTP response is not sufficient to establish successful accounting posting.
 
 NHBCAP01 requires a valid accounting document, company code, and fiscal year in the SAP confirmation before the accounting event is marked `POSTED`.
+
+For `PAYMENT_REVERSED`, NHBCAP01 requires the corresponding original `PAYMENT_RECEIVED` accounting event to have already been successfully posted.
+
+The reversal path uses the original SAP-native accounting identity:
+
+```text
+AccountingDocument
+        +
+CompanyCode
+        +
+FiscalYear
+        │
+        ▼
+ReversalReferenceDocument
+```
+
+The dedicated reversal request uses:
+
+- `ReversalReason`
+- `ReversalReferenceDocument`
+- `ReversalDate`
+
+The reversal SOAP request deliberately excludes normal debit/credit `<Item>` elements.
+
+The operational reversal reason stored by the Murabaha domain remains separate from the SAP-configured reversal-reason code.
 
 ### Automated Verification
 
@@ -578,29 +722,51 @@ Murabaha servicing regression verifies:
 - default servicing
 - settlement behavior
 - accounting-event creation
+- `PAYMENT_RECEIVED` event creation
+- `PAYMENT_REVERSED` event creation
 
 SAP accounting unit and integration tests verify:
 
-- accounting configuration validation
-- accounting-event mapping
-- SOAP request construction
+- normal accounting configuration validation
+- reversal accounting configuration validation
+- normal accounting-event mapping
+- reversal-event mapping
+- normal SOAP request construction
+- reversal SOAP request construction
 - message-context validation
 - XML escaping
+- SAP field-length validation
+- SAP document-reference validation
+- reversal-reason validation
+- reversal-reference validation
 - Basic Authentication transport
 - SAP BTP Destination transport
 - SAP response parsing
 - SOAP Fault handling
 - SAP business-failure handling
+- original-posting identity validation
+- original-company-code consistency validation
 
 CAP-level regression verifies:
 
 - `PENDING → FAILED` when SAP posting fails
 - persistence of `errorMessage`
-- `PENDING → POSTED` when SAP confirms posting
+- `PENDING → POSTED` when SAP confirms normal posting
+- `PENDING → POSTED` when SAP confirms reversal posting
+- persistence of `externalAccountingDocument`
+- persistence of `externalCompanyCode`
+- persistence of `externalFiscalYear`
 - persistence of `externalAccountingDocumentId`
 - prevention of reposting an event that is no longer `PENDING`
+- lookup of the original posted event before reversal
+- validation of the original SAP accounting-document identity
 
-The current automated baseline therefore verifies both the successful and unsuccessful accounting-posting paths without requiring a live SAP system for every development regression.
+Current verified regression baseline:
+
+- SAP accounting/integration suite: **43 passed, 0 failed**
+- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+
+The current automated baseline therefore verifies normal posting, reversal posting, and failure handling without requiring a live SAP system for every development regression.
 
 ### Current Verification Boundary
 
@@ -619,10 +785,16 @@ Accounting-event creation
 Governed CAP posting action
         VERIFIED
             │
-NHB-to-SAP mapping
+Normal NHB-to-SAP mapping
         VERIFIED
             │
-SAP SOAP construction
+Reversal NHB-to-SAP mapping
+        VERIFIED
+            │
+Normal SAP SOAP construction
+        VERIFIED
+            │
+Reversal SAP SOAP construction
         VERIFIED
             │
 Transport abstraction
@@ -634,11 +806,14 @@ SAP response processing
 CAP POSTED / FAILED lifecycle
         VERIFIED
             │
-Live SAP S/4HANA posting
+Live SAP S/4HANA normal posting
+        PENDING EXTERNAL VERIFICATION
+            │
+Live SAP S/4HANA reversal posting
         PENDING EXTERNAL VERIFICATION
 ```
 
-The prototype therefore demonstrates the application and integration architecture required for SAP accounting posting without claiming that a live SAP accounting document has already been created.
+The prototype therefore demonstrates the application and integration architecture required for both SAP accounting posting and SAP accounting reversal without claiming that a live SAP accounting document or reversal has already been created.
 
 ### Next Milestones
 
@@ -649,42 +824,91 @@ The immediate priorities are:
 1. Configure the SAP S/4HANA Journal Entry service in the laboratory environment.
 2. Create and validate the required SAP BTP Destination.
 3. Confirm the supported authentication and communication arrangement.
-4. Execute the first live `PAYMENT_RECEIVED` posting.
-5. Confirm the returned SAP accounting-document identity.
-6. Verify the persisted `POSTED` state and `externalAccountingDocumentId`.
-7. Record the successful scenario as the live `SAP-T05` regression baseline.
-8. Implement and verify the dedicated SAP reversal contract for `PAYMENT_REVERSED`.
-9. Introduce additional accounting configuration only when supported by approved accounting requirements.
-10. Continue SAP cash-management integration only after the accounting posting baseline is stable.
+4. Provide approved test accounting configuration, including a valid SAP reversal-reason code.
+5. Execute the first live `PAYMENT_RECEIVED` posting.
+6. Confirm the returned SAP accounting-document identity.
+7. Verify the persisted `POSTED` state and SAP-native accounting identity.
+8. Record the successful scenario as the live `SAP-T05` regression baseline.
+9. Execute the corresponding Murabaha payment reversal.
+10. Confirm creation of the `PAYMENT_REVERSED` accounting event.
+11. Submit the reversal event through `postAccountingEvent`.
+12. Confirm that NHBCAP01 derives the SAP reversal reference from the original accounting document, company code, and fiscal year.
+13. Confirm that SAP accepts the configured reversal reason.
+14. Confirm the returned SAP accounting-document identity for the reversal.
+15. Verify the persisted reversal `POSTED` state.
+16. Record the successful reversal scenario as the live `SAP-T05R` regression baseline.
+17. Introduce additional accounting configuration only when supported by approved accounting requirements.
+18. Continue SAP cash-management integration only after the normal-posting and reversal baselines are stable.
 
-### Payment Reversal Roadmap
+### Payment Reversal Baseline
 
-`PAYMENT_REVERSED` is already represented as an NHB accounting event but is intentionally not submitted through the normal `PAYMENT_RECEIVED` posting path.
+`PAYMENT_REVERSED` is now implemented as a dedicated SAP accounting path.
 
-Its target architecture is:
+It is intentionally not submitted through the normal `PAYMENT_RECEIVED` debit/credit posting contract.
+
+The implemented architecture is:
 
 ```text
 PAYMENT_REVERSED
         │
         ▼
-Locate original accounting effect
+Locate original PAYMENT_RECEIVED event
         │
         ▼
-Resolve SAP reversal treatment
+Verify original event is POSTED
         │
         ▼
-Dedicated SAP reversal request
+Resolve original SAP accounting identity
         │
         ▼
-Confirm SAP correction
+Resolve reversal configuration
         │
         ▼
-Update NHB accounting-event state
+Build ReversalReferenceDocument
+        │
+        ▼
+Build dedicated SAP reversal request
+        │
+        ▼
+Submit through shared SAP transport
+        │
+        ▼
+Parse SAP synchronous confirmation
+        │
+        ├── success
+        │      │
+        │      ▼
+        │    POSTED
+        │      +
+        │ SAP reversal document identity
+        │
+        └── failure
+               │
+               ▼
+             FAILED
+               +
+          errorMessage
 ```
 
-The implementation must preserve traceability to the original payment and original SAP accounting document.
+The implementation preserves traceability to:
 
-The specific SAP reversal mechanism must be confirmed against the deployed SAP S/4HANA service before implementation.
+- the original payment
+- the original `PAYMENT_RECEIVED` accounting event
+- the original SAP accounting document
+- the reversal accounting event
+- the SAP accounting document returned for the reversal
+
+The SAP-native original document identity is preserved through:
+
+- `externalAccountingDocument`
+- `externalCompanyCode`
+- `externalFiscalYear`
+
+These values are used to derive the SAP `ReversalReferenceDocument`.
+
+The application-side reversal contract is implemented and regression-tested.
+
+The remaining reversal milestone is live verification against an actual SAP S/4HANA system, including confirmation that the configured SAP reversal-reason code and reversal reference are accepted by the target system.
 
 ### Scope Discipline
 
