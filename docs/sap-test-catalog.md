@@ -317,6 +317,28 @@ The responsibilities are separated as follows:
 - `journal-entry-soap.js` builds the normal synchronous SAP Journal Entry SOAP request.
 - `journal-entry-reversal-soap.js` builds the dedicated SAP journal-entry reversal request and deliberately excludes normal debit/credit posting items.
 - `transport.js` provides the shared HTTP transport boundary.
+- Cross-cutting outbound timeout handling is provided through `srv/integration/http.js`.
+
+The shared timeout baseline provides:
+
+- a default outbound timeout of 10,000 milliseconds
+- runtime override through `NHB_HTTP_TIMEOUT_MS`
+- validation that the configured timeout is a positive integer
+- `AbortController`-based timeout handling for native `fetch` transports
+- normalized timeout failures using `OutboundTimeoutError`
+- stable error code `NHB_HTTP_TIMEOUT`
+
+Fiserv OAuth, Account Details, Get Party List, and Get Party use the shared timeout-aware HTTP boundary.
+
+SAP transport applies the same timeout policy through:
+
+- `fetchWithTimeout()` for direct/basic transport
+- the SAP Cloud SDK request `timeout` configuration for Destination-based transport
+
+Automatic retry is deliberately not part of this baseline.
+
+In particular, SAP accounting posting and reversal are not automatically retried because a transport timeout does not prove that the remote financial operation was not processed.
+
 - `journal-entry-response.js` parses the SAP synchronous confirmation and returns the SAP accounting document, company code, fiscal year, processing result, severity, log notes, and normalized external accounting-document reference.
 
 The transport supports two execution modes:
@@ -578,6 +600,11 @@ These values remain prototype configuration and must not be interpreted as appro
 - Basic Authentication transport
 - SAP BTP Destination transport
 - dependency-injected SAP transport testing
+- shared outbound HTTP timeout configuration
+- native-fetch timeout and abort handling
+- SAP Destination request timeout propagation
+- controlled `NHB_HTTP_TIMEOUT` error classification
+- preservation of no-automatic-retry behavior for financial posting
 - successful SAP confirmation parsing
 - SAP business-failure parsing
 - SOAP Fault handling
@@ -633,6 +660,17 @@ identity
 The current integration has therefore progressed beyond request preparation alone.
 
 The application-side SAP integration contract is now verified through automated regression tests using controlled SAP responses.
+
+The outbound timeout baseline has additionally been verified through:
+
+- default timeout resolution to 10,000 milliseconds
+- rejection of invalid `NHB_HTTP_TIMEOUT_MS` configuration
+- controlled local timeout producing `OutboundTimeoutError` / `NHB_HTTP_TIMEOUT`
+- successful Fiserv OAuth execution using the timeout-aware transport
+- forced 1 millisecond Fiserv OAuth timeout producing the normalized timeout error
+- successful Fiserv Get Party execution after timeout migration
+- dependency-injected SAP Destination verification confirming `timeout = 10000`
+- deployed Murabaha servicing regression completing all 15 HTTP checks successfully after the timeout changes
 
 Current verified regression baseline:
 

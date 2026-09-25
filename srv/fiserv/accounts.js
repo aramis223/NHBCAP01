@@ -1,4 +1,4 @@
-
+const { fetchWithTimeout } = require('../integration/http');
 const crypto = require("crypto");
 const { getAccessToken } = require("./auth");
 
@@ -19,7 +19,7 @@ async function getAccountDetails(accountId, orgId) {
 
   const accessToken = await getAccessToken();
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${baseUrl}/acctservice/acctmgmt/accounts/secured`,
     {
       method: "POST",

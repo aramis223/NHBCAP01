@@ -2,6 +2,11 @@ const {
     executeHttpRequest
 } = require('@sap-cloud-sdk/http-client');
 
+const {
+    fetchWithTimeout,
+    getHttpTimeoutMs
+} = require('../integration/http');
+
 const JOURNAL_ENTRY_SOAP_ACTION =
     'http://sap.com/xi/SAPSCORE/SFIN/' +
     'JournalEntryCreateRequestConfirmation_In/' +
@@ -70,6 +75,7 @@ async function postSoapRequest(
                 },
                 {
                     method: 'POST',
+                    timeout: getHttpTimeoutMs(),
                     headers: {
                         'Content-Type':
                             'text/xml; charset=utf-8',
@@ -86,7 +92,7 @@ async function postSoapRequest(
             : JSON.stringify(response.data);
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
         config.endpointUrl,
         {
             method: 'POST',

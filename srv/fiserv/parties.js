@@ -1,3 +1,4 @@
+const { fetchWithTimeout } = require('../integration/http');
 const crypto = require("crypto");
 const { getAccessToken } = require("./auth");
 
@@ -20,7 +21,7 @@ async function getPartyList(orgId, options = {}) {
         partyListSel.Name = options.name;
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
         `${baseUrl}/partyservice/parties/parties/secured/list`,
         {
             method: "POST",
@@ -91,7 +92,7 @@ async function getParty(partyId, orgId) {
 
     const accessToken = await getAccessToken();
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
         `${baseUrl}/partyservice/parties/parties/secured`,
         {
             method: "POST",

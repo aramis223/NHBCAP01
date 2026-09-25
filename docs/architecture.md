@@ -2148,7 +2148,9 @@ It is not part of the current active Fiserv runtime path.
 
 The current Fiserv client uses its runtime configuration directly for external API connectivity.
 
-Destination Service may be reconsidered in a future target architecture if it provides a justified integration or governance benefit, but it should not be documented as a current dependency.
+Destination Service is not a dependency of the current Fiserv runtime path.
+
+For SAP S/4HANA accounting, NHBCAP01 already implements Destination-aware transport through the SAP Cloud SDK. The required SAP BTP Destination configuration and live connectivity remain pending laboratory verification.
 
 ### 11.8 Deployment verification
 
@@ -2493,7 +2495,7 @@ The following decisions define the current NHBCAP01 architecture.
 | Account Details and Accountholder form the verified deployed Fiserv baseline | Both have been verified locally and through Cloud Foundry |
 | New integrations are validated locally before cloud promotion | Reduces risk to the stable deployed baseline |
 | Destination Service is not a current Fiserv runtime dependency | Current Fiserv connectivity uses runtime configuration directly |
-| SAP S/4HANA remains a target integration | Keeps planned SAP enterprise integration distinct from verified implementation |
+| SAP S/4HANA accounting is an implemented NHBCAP01 integration boundary | Normal posting and reversal are implemented and regression-verified; live S/4HANA execution remains pending external verification |
 | SAP integration should use supported APIs/services | Avoids direct database coupling |
 
 ---
@@ -2518,7 +2520,7 @@ Current limitations and open items include:
 - Runtime secret management can be strengthened as the deployment architecture matures.
 - Fiserv integration currently focuses on retrieval scenarios; broader transactional capabilities have not yet been introduced.
 - SAP S/4HANA accounting integration is implemented through the NHBCAP01 application boundary and verified through controlled regression; live SAP S/4HANA posting remains pending external verification.
-- The final role of SAP BTP Destination Service in the target architecture remains undecided.
+- SAP BTP Destination Service is not used by the current Fiserv runtime path; SAP accounting uses Destination-aware transport, while the live SAP Destination configuration remains pending laboratory verification.
 
 These items are recorded explicitly so that verified implementation, temporary integration mappings, and future architecture remain distinguishable.
 
@@ -2771,19 +2773,448 @@ SAP cash-flow and liquidity integration should follow only after the normal-post
 
 ### 15.6 Mature cross-cutting architecture
 
-As the prototype grows, cross-cutting concerns should be strengthened, including:
+NHBCAP01 now contains enough verified domain, integration, deployment, and accounting behavior to justify an explicit cross-cutting architecture baseline.
+
+The objective is not to introduce production patterns indiscriminately.
+
+Cross-cutting controls should be introduced where they protect an already demonstrated architectural boundary or address a concrete runtime risk.
+
+The current baseline covers:
 
 - authorization
-- secret management
-- observability
-- structured error mapping
-- timeout policy
-- retry policy
-- resilience
-- auditability
-- configuration governance
+- error semantics
+- correlation and observability
+- outbound timeout policy
+- retry and idempotency policy
+- secret and configuration governance
+- auditability and resilience evolution
 
-These should be introduced according to demonstrated architectural need rather than added prematurely.
+#### 15.6.1 Current cross-cutting baseline
+
+Several cross-cutting controls already exist.
+
+The current security boundaries are:
+
+```text
+NHB Consumer
+      │
+      │ XSUAA authentication
+      ▼
+NHBCAP01
+      │
+      ├── NHB domain validation and authorization boundary
+      │
+      ├── Fiserv OAuth 2.0 Client Credentials
+      │        │
+      │        ▼
+      │     Fiserv / Finxact
+      │
+      └── SAP transport
+               │
+               ├── SAP BTP Destination-aware mode
+               └── controlled direct/basic mode
+```
+
+The current implementation also provides:
+
+- controlled CAP validation through `req.reject(...)`
+- differentiated HTTP semantics including `400`, `404`, `409`, and `502`
+- business-event correlation through `MurabahaAccountingEvent.correlationId`
+- persistence of SAP posting outcomes
+- persistence of bounded accounting error information
+- runtime configuration outside application source code
+- removal of temporary full provider-response logging after integration verification
+
+These controls form the starting point for further maturity.
+
+They should not be replaced merely to introduce a generic framework.
+
+#### 15.6.2 Authorization
+
+XSUAA currently establishes the authentication boundary between an NHB consumer and the deployed CAP application.
+
+Authentication alone is not a complete authorization model.
+
+As NHBCAP01 introduces more sensitive commands, explicit authorization rules should be defined for actions such as:
+
+- recording credit decisions
+- recording Sharia decisions
+- activating financing
+- posting payments
+- reversing payments
+- submitting accounting events
+- future administrative or configuration operations
+
+The authorization model should be based on NHB business responsibilities rather than provider-specific roles.
+
+The intended progression is:
+
+```text
+Authenticated identity
+        │
+        ▼
+NHB role / scope
+        │
+        ▼
+Authorized business capability
+        │
+        ▼
+CAP action
+```
+
+Fine-grained authorization should be introduced only after the required NHB roles and responsibilities have been defined.
+
+Provider credentials must not be used as a substitute for NHB consumer authorization.
+
+#### 15.6.3 Error semantics
+
+NHBCAP01 already distinguishes several classes of service failure.
+
+Examples include:
+
+```text
+400
+│
+└── invalid request or required business input
+
+404
+│
+└── requested NHB business object not found
+
+409
+│
+└── business-state or consistency conflict
+
+502
+│
+└── external provider unavailable or unsuccessful
+```
+
+Provider failures are handled inside the CAP boundary.
+
+Raw Fiserv or SAP responses should not become the NHB consumer contract.
+
+The target architecture is:
+
+```text
+Provider-specific failure
+        │
+        ▼
+Integration-layer interpretation
+        │
+        ▼
+NHB error category
+        │
+        ▼
+Controlled CAP response
+```
+
+Future refinement should distinguish categories such as:
+
+- configuration failure
+- authentication failure
+- connectivity failure
+- timeout
+- provider rejection
+- invalid provider response
+- transient provider failure
+- permanent business rejection
+
+The provider's native status and diagnostic detail may be retained where operationally necessary, but consumer-facing responses should remain controlled and provider-independent.
+
+#### 15.6.4 Correlation and observability
+
+Murabaha accounting already uses a business correlation identifier.
+
+For example:
+
+```text
+Murabaha payment
+      │
+      ▼
+externalPaymentId
+      │
+      ▼
+MurabahaAccountingEvent.correlationId
+      │
+      ▼
+SAP accounting request
+```
+
+Payment reversal follows the same principle using the external reversal reference.
+
+This correlation is part of business traceability and must be preserved.
+
+It should remain distinct from technical request tracing.
+
+The target observability model therefore separates:
+
+```text
+Business correlation
+    correlationId
+        │
+        └── traces one business event across accounting processing
+
+Technical correlation
+    requestId / traceId
+        │
+        └── traces one runtime request across services and transports
+```
+
+Future structured logging should include only the information required for diagnosis and traceability.
+
+Provider payloads, authentication material, access tokens, credentials, and unnecessary customer information must not be written to logs.
+
+The governing principle remains:
+
+```text
+Log enough to diagnose system behavior
+              +
+Preserve end-to-end traceability
+              +
+Minimize sensitive and provider-owned data
+```
+
+#### 15.6.5 Outbound timeout policy
+
+The current Fiserv integrations use outbound HTTP calls for:
+
+- OAuth token acquisition
+- Account Details
+- Get Party List
+- Get Party
+
+The SAP transport supports:
+
+- SAP BTP Destination-aware execution through the SAP Cloud SDK
+- controlled direct/basic HTTP execution
+
+Explicit timeout behavior has not yet been standardized across these paths.
+
+This is the first justified runtime resilience control to introduce.
+
+An outbound request must not be allowed to wait indefinitely for a remote system.
+
+The intended pattern is:
+
+```text
+NHBCAP01 outbound call
+        │
+        ▼
+Configured timeout boundary
+        │
+        ├── response received
+        │       │
+        │       ▼
+        │   normal processing
+        │
+        └── timeout reached
+                │
+                ▼
+          controlled failure
+                │
+                ▼
+        NHB error handling
+```
+
+Timeout configuration should be externalized rather than hard-coded independently inside provider clients.
+
+A shared default may initially be used where justified.
+
+Provider-specific timeout overrides should be introduced only when operational evidence shows that different integration paths require different policies.
+
+Timeout handling must remain a transport concern and must not alter Murabaha domain semantics.
+
+#### 15.6.6 Retry and idempotency policy
+
+Automatic retry is not universally safe.
+
+Read-oriented operations may eventually support limited retries for clearly transient failures.
+
+Examples may include:
+
+- customer retrieval
+- account retrieval
+- OAuth token retrieval
+
+Retry eligibility must depend on explicit failure classification.
+
+Financial commands require stricter treatment.
+
+The critical risk is:
+
+```text
+Financial request submitted
+        │
+        ▼
+Provider processes request
+        │
+        ▼
+Response is lost or times out
+        │
+        ▼
+NHBCAP01 cannot determine outcome
+        │
+        ▼
+Blind retry
+        │
+        ▼
+Potential duplicate business operation
+```
+
+For this reason:
+
+- Murabaha payment posting must not be blindly retried.
+- Murabaha reversal must not be blindly retried.
+- SAP Journal Entry posting must not be blindly retried.
+- SAP accounting reversal must not be blindly retried.
+
+A timeout does not prove that the remote business operation failed.
+
+Financial retry behavior should therefore be introduced only after the architecture defines sufficient:
+
+- idempotency
+- reconciliation
+- provider reference handling
+- duplicate detection
+- uncertain-outcome recovery
+
+The governing rule is:
+
+```text
+Retry only when the operation
+and the failure mode
+are both known to be retry-safe.
+```
+
+#### 15.6.7 Secret and configuration governance
+
+NHBCAP01 already keeps external credentials outside application source code.
+
+Current runtime configuration includes external provider endpoints, credentials, organization identifiers, SAP transport settings, and accounting configuration.
+
+The architecture should preserve the separation:
+
+```text
+Application logic
+        │
+        ▼
+Configuration contract
+        │
+        ▼
+Environment-specific values
+```
+
+Secrets must not be committed to:
+
+- JavaScript source files
+- CDS models
+- test evidence
+- architecture documentation
+- Git history
+
+As the deployment architecture matures, runtime secrets should move toward platform-managed secret handling where justified.
+
+Configuration should be classified into at least:
+
+```text
+Non-secret runtime configuration
+        │
+        ├── endpoint selection
+        ├── destination name
+        ├── organization identifier
+        └── timeout policy
+
+Secret configuration
+        │
+        ├── API credentials
+        ├── passwords
+        └── other authentication material
+
+Business configuration
+        │
+        ├── accounting mappings
+        ├── company-code-related settings
+        └── approved reversal configuration
+```
+
+This distinction prevents technical secrets, runtime parameters, and business policy from becoming one undifferentiated configuration set.
+
+#### 15.6.8 Auditability and resilience evolution
+
+NHBCAP01 already provides domain-level traceability through persistent Murabaha lifecycle, payment, reversal, and accounting records.
+
+Further auditability should evolve from demonstrated requirements rather than through indiscriminate event logging.
+
+Future audit design may require recording:
+
+- actor identity
+- authorized action
+- business object
+- state transition
+- timestamp
+- correlation identifier
+- outcome
+
+Observability is not equivalent to audit.
+
+Diagnostic logs may be transient and operational.
+
+Audit records represent governed evidence of business or administrative activity and may have different retention and integrity requirements.
+
+More advanced resilience mechanisms such as:
+
+- circuit breakers
+- bulkheads
+- automated recovery
+- provider health policies
+
+should not be introduced merely because they are common architectural patterns.
+
+They should be added only when runtime behavior demonstrates a concrete requirement and when their interaction with financial-processing semantics is understood.
+
+#### 15.6.9 Implementation sequence
+
+The recommended implementation sequence is:
+
+```text
+Current verified baseline
+        │
+        ▼
+1. Explicit outbound timeout policy
+        │
+        ▼
+2. Controlled timeout error classification
+        │
+        ▼
+3. Technical request correlation
+        │
+        ▼
+4. Structured logging
+        │
+        ▼
+5. NHB authorization roles and scopes
+        │
+        ▼
+6. Retry-safe operation classification
+        │
+        ▼
+7. Financial idempotency and reconciliation strategy
+        │
+        ▼
+8. Stronger secret/configuration governance
+        │
+        ▼
+9. Additional resilience controls where justified
+```
+
+The first implementation increment should therefore be explicit outbound timeout handling.
+
+Automatic retry is deliberately deferred until retry-safe operations and uncertain financial outcomes are formally addressed.
+
+The governing cross-cutting principle is:
+
+> NHBCAP01 introduces security, resilience, observability, and governance controls according to demonstrated architectural risk while preserving explicit NHB business semantics and provider boundaries.
 
 ---
 ## Summary
@@ -2842,7 +3273,7 @@ Provider Contract
 
 The principal open architecture concerns are the final NHB customer identifier strategy, NHBCustomer query semantics beyond the currently verified equality predicates joined by `and`, and the observed Party List record without `PartyId`.
 
-SAP S/4HANA remains part of the target architecture and will be introduced through supported SAP APIs when a concrete NHB integration use case is selected.
+SAP S/4HANA accounting is now an implemented NHBCAP01 integration boundary using the supported synchronous Journal Entry service for normal posting and reversal. Live S/4HANA execution remains pending external verification, while additional SAP capabilities remain selective future integrations driven by defined NHB use cases.
 
 The governing architecture principle remains:
 

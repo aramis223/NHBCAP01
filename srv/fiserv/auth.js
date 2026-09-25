@@ -1,3 +1,4 @@
+const { fetchWithTimeout } = require('../integration/http');
 
 async function getAccessToken() {
   const tokenUrl = process.env.FISERV_TOKEN_URL;
@@ -12,7 +13,7 @@ async function getAccessToken() {
     .from(`${apiKey}:${apiSecret}`)
     .toString("base64");
 
-  const response = await fetch(tokenUrl, {
+  const response = await fetchWithTimeout(tokenUrl, {
     method: "POST",
     headers: {
       "Authorization": `Basic ${credentials}`,
