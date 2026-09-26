@@ -91,12 +91,20 @@ fi
 # ------------------------------------------------------------
 # 4. Valid PENDING accounting event
 # ------------------------------------------------------------
+# ------------------------------------------------------------
+# 4. Valid PENDING event without SAP accounting configuration
+# ------------------------------------------------------------
+
+expect_status \
+  500 \
+  POST \
+  "$BASE_URL/postAccountingEvent" \
+  "{\"accountingEventId\":\"$EVENT_ID\"}" \
+  "PENDING event without SAP accounting configuration"
 
 RESULT="$(
-  http -fsS -X POST \
-    -H "Content-Type: application/json" \
-    -d "{\"accountingEventId\":\"$EVENT_ID\"}" \
-    "$BASE_URL/postAccountingEvent"
+  http -fsS \
+    "$BASE_URL/MurabahaAccountingEvent($EVENT_ID)"
 )"
 
 printf '%s' "$RESULT" \
@@ -104,10 +112,11 @@ printf '%s' "$RESULT" \
   --arg id "$EVENT_ID" '
     .ID == $id and
     .postingStatus == "PENDING" and
-    .externalAccountingDocumentId == null
+    .errorMessage == null and
+    .externalAccountingDocument == null and
+    .externalAccountingDocumentId == null and
+    .externalCompanyCode == null and
+    .externalFiscalYear == null
   ' >/dev/null
 
-echo "PASS: valid PENDING accounting event accepted"
-
-echo "Murabaha accounting regression passed."
-echo "Test accounting event: $EVENT_ID"
+echo "PASS: missing SAP accounting configuration preserved PENDING state"

@@ -327,7 +327,8 @@ The application-side SAP accounting path is verified through isolated SAP-layer 
 Current verified regression baseline:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 The verified CAP-level outcomes include:
 
@@ -764,7 +765,8 @@ CAP-level regression verifies:
 Current verified regression baseline:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 The current automated baseline therefore verifies normal posting, reversal posting, and failure handling without requiring a live SAP system for every development regression.
 

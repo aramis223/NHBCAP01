@@ -614,7 +614,8 @@ The verified baseline includes:
 Current verified regression baseline:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 Live SAP S/4HANA execution remains an external verification milestone for both normal posting and reversal and is not yet claimed as completed end to end.
 
@@ -2417,7 +2418,8 @@ The application-side integration has been verified through isolated SAP-layer te
 Current verified regression baseline:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 Live SAP S/4HANA execution remains pending external verification for both normal posting and reversal.
 
@@ -2701,7 +2703,8 @@ For successful normal posting and reversal, NHBCAP01 persists:
 The current automated regression baseline is:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 The next SAP milestone is therefore no longer to introduce normal posting or reversal.
 

@@ -384,7 +384,8 @@ The current automated regression baseline verifies both normal journal-entry pos
 Current verified test baseline:
 
 - SAP accounting/integration regression: **43 passed, 0 failed**
-- Murabaha servicing/accounting regression: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 These tests verify the NHBCAP01 application-side integration contract and behavior. They do not constitute live SAP S/4HANA posting verification.
 
@@ -675,7 +676,8 @@ The outbound timeout baseline has additionally been verified through:
 Current verified regression baseline:
 
 - SAP accounting/integration suite: **43 passed, 0 failed**
-- Murabaha servicing/accounting suite: **14 passed, 0 failed**
+- Murabaha servicing regression: **15 passed, 0 failed**
+- Murabaha accounting boundary regression: **4 passed, 0 failed**
 
 The successful normal posting and reversal paths remain externally unverified against a live SAP S/4HANA system because no runnable SAP S/4HANA laboratory appliance is currently available.
 
@@ -711,6 +713,37 @@ Live SAP execution therefore remains the external verification step for both:
 - the original payment event and reversal event remain traceable through their NHB payment and accounting-event relationships
 
 Every successful live SAP accounting test should then become a repeatable regression scenario in accordance with the catalog regression rule.
+
+### 7.8 Deployed CAP Accounting Boundary Verification
+
+The deployed Cloud Foundry runtime has additionally been verified for the governed `postAccountingEvent` boundary.
+
+Verified deployed behavior:
+
+- `postAccountingEvent` is exposed in the deployed OData `$metadata`
+- XSUAA-authenticated requests reach the deployed CAP action
+- a valid `PENDING` `MurabahaAccountingEvent` can be resolved by identifier
+- missing SAP accounting runtime configuration is detected before external posting begins
+- the request returns HTTP 500 for the missing required accounting configuration
+- the accounting event remains `postingStatus = PENDING`
+- `errorMessage` remains `null`
+- `externalAccountingDocument` remains `null`
+- `externalAccountingDocumentId` remains `null`
+- `externalCompanyCode` remains `null`
+- `externalFiscalYear` remains `null`
+
+This verifies that NHBCAP01 does not falsely mark an accounting event as `FAILED` or `POSTED` when SAP accounting configuration is unavailable before the external posting attempt begins.
+
+The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
+
+- `externalCompanyCode` remains `null`
+- `externalFiscalYear` remains `null`
+
+This verifies that NHBCAP01 does not falsely mark an accounting event as `FAILED` or `POSTED` when SAP accounting configuration is unavailable before the external posting attempt begins.
+
+The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
+
+The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
 
 ## 8. Regression rule
 
