@@ -1,0 +1,7 @@
+applications:
+  - name: nhb-mock-s4
+    path: .
+    memory: 128M
+    command: npm start
+    buildpacks:
+      - nodejs_buildpack

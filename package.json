@@ -18,7 +18,8 @@
   },
   "scripts": {
     "start": "cds-serve",
-    "watch-customer-ui": "cds watch --open nhb.cap.customer.customerui/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "watch-customer-ui": "cds watch --open nhb.cap.customer.customerui/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "mock-s4": "node mock-s4/server.js"
   },
   "private": true,
   "workspaces": [
