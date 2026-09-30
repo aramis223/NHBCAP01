@@ -2473,6 +2473,528 @@ SAP S/4HANA integration
 A component moves from target architecture into current architecture only after its actual integration path has been implemented and demonstrated.
 
 ---
+
+## SAP Integration Suite Mediation Baseline
+
+### Architecture objective
+
+NHBCAP01 now uses SAP Integration Suite as the verified enterprise mediation layer between the CAP application and the SAP S/4HANA accounting interface.
+
+The purpose of this architecture is not merely to insert an additional technical hop. Integration Suite introduces a controlled integration boundary between the NHB-owned application architecture and the external SAP accounting system.
+
+The verified runtime path is:
+
+NHBCAP01
+→ SAP Destination Service
+→ SAP Integration Suite
+→ SOAP receiver
+→ SAP S/4HANA-compatible endpoint
+
+For the current verification baseline, the final SAP S/4HANA endpoint is represented by a controlled mock receiver deployed on SAP BTP Cloud Foundry.
+
+The architecture therefore separates:
+
+- NHB banking and Murabaha domain logic
+- SAP accounting mapping
+- enterprise integration mediation
+- destination and authentication configuration
+- target-system execution
+
+### Runtime architecture
+
+The deployed path is:
+
+Murabaha payment or reversal
+→ MurabahaAccountingEvent
+→ postAccountingEvent
+→ srv/sap/accounting.js
+→ srv/sap/transport.js
+→ SAP Destination Service
+→ NHB - S4 Journal Entry Mediation
+→ SOAP receiver
+→ mock SAP S/4HANA
+→ SAP-style confirmation
+→ NHBCAP01 response parser
+→ MurabahaAccountingEvent updated
+
+The Integration Suite package is:
+
+NHB Integration
+
+The integration flow is:
+
+NHB - S4 Journal Entry Mediation
+
+Integration Flow ID:
+
+NHB_S4_Journal_Entry_Mediation
+
+The Integration Suite inbound sender address is:
+
+/nhb/s4/journal-entry
+
+The deployed runtime endpoint is:
+
+https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry
+
+The current receiver is:
+
+https://nhb-mock-s4.cfapps.us10-001.hana.ondemand.com/journal-entry
+
+### Responsibility boundaries
+
+NHBCAP01 remains responsible for the business and accounting semantics.
+
+NHBCAP01 owns:
+
+- Murabaha lifecycle rules
+- payment and reversal eligibility
+- accounting-event creation
+- accounting-event status
+- payment, financing, and installment traceability
+- SAP journal-entry mapping
+- SAP reversal mapping
+- SOAP request construction
+- SAP response parsing
+- persistence of external SAP document identity
+
+SAP Destination Service owns:
+
+- endpoint abstraction between NHBCAP01 and Integration Suite
+- OAuth2 Client Credentials configuration
+- runtime destination lookup
+- separation of endpoint credentials from application source code
+
+SAP Integration Suite owns:
+
+- enterprise mediation
+- integration endpoint exposure
+- authentication enforcement
+- receiver routing
+- protocol mediation boundary
+- message-processing monitoring
+- technical integration observability
+
+The SAP S/4HANA-compatible receiver owns:
+
+- execution of the accounting request
+- generation of the SAP-style accounting confirmation
+
+For the current prototype, the receiver is a controlled mock implementation.
+
+### Destination architecture
+
+NHBCAP01 uses the SAP Cloud SDK destination-based transport already implemented in:
+
+srv/sap/transport.js
+
+Destination mode is selected when:
+
+SAP_JOURNAL_ENTRY_DESTINATION
+
+is configured.
+
+The verified destination is:
+
+NHB-INTEGRATION-SUITE-S4
+
+The effective runtime path is therefore:
+
+NHBCAP01
+→ destination name
+→ SAP Destination Service
+→ OAuth2 Client Credentials
+→ Integration Suite runtime
+→ SOAP receiver
+→ target system
+
+This avoids embedding Integration Suite client credentials directly in the CAP application.
+
+The application knows the logical destination name rather than owning the OAuth token acquisition process.
+
+### Authentication separation
+
+Two independent OAuth security contexts exist in the verified architecture.
+
+NHBCAP01 inbound authentication uses:
+
+XSUAA
+
+This protects the CAP service and the postAccountingEvent action.
+
+Integration Suite inbound authentication uses:
+
+SAP Process Integration Runtime OAuth credentials
+
+with the role:
+
+ESBMessaging.send
+
+These authentication contexts are intentionally separate.
+
+A NHBCAP01 XSUAA bearer token cannot be used as an Integration Suite runtime token.
+
+This was demonstrated during verification when an XSUAA token was rejected by Integration Suite because its JWT audience did not match the Integration Suite runtime client.
+
+The final deployed application path does not require NHBCAP01 to generate an Integration Suite bearer token directly.
+
+SAP Destination Service performs the OAuth2 Client Credentials flow.
+
+### Accounting configuration
+
+The deployed CAP service uses environment-based SAP accounting configuration.
+
+Required variables are:
+
+SAP_ACCOUNTING_COMPANY_CODE
+SAP_ACCOUNTING_DOCUMENT_TYPE
+SAP_ACCOUNTING_BUSINESS_TRANSACTION_TYPE
+SAP_ACCOUNTING_CREATED_BY_USER
+SAP_ACCOUNTING_DEBIT_ACCOUNT
+SAP_ACCOUNTING_CREDIT_ACCOUNT
+SAP_ACCOUNTING_REVERSAL_REASON
+
+The verified prototype values are:
+
+Company Code:
+1000
+
+Document Type:
+SA
+
+Business Transaction Type:
+RFBU
+
+Created By User:
+NHBCAP01
+
+Debit Account:
+110000
+
+Credit Account:
+410000
+
+Reversal Reason:
+01
+
+These values are prototype configuration and do not represent a production SAP chart-of-accounts or accounting design.
+
+### SAP-safe document reference
+
+Integration testing exposed an important boundary constraint.
+
+The SAP Journal Entry SOAP contract limits DocumentReferenceID to 16 characters.
+
+NHBCAP01 accounting correlation identifiers are intentionally richer and may exceed this limit.
+
+Example NHBCAP01 correlation identifier:
+
+PAY-SVC-002-20260925185040-25064
+
+The original mapping passed correlationId directly to the SAP document reference.
+
+This caused:
+
+Journal entry field reference exceeds SAP maximum length 16
+
+The architecture was corrected by separating the NHB traceability identifier from the SAP-specific reference.
+
+The full correlationId remains persisted in NHBCAP01.
+
+A SAP-safe reference is derived from the accounting event UUID:
+
+remove hyphens
+→ take the first 16 characters
+
+Example:
+
+Accounting Event ID:
+
+243909b6-5b78-4a88-ae32-854abced75de
+
+SAP DocumentReferenceID:
+
+243909b65b784a88
+
+This preserves the NHB-owned traceability model while satisfying the external SAP contract.
+
+The transformation is deterministic and isolated at the SAP anti-corruption boundary.
+
+### Posting verification
+
+A real persisted PAYMENT_RECEIVED accounting event was submitted through the deployed CAP action:
+
+postAccountingEvent
+
+The verified application path was:
+
+deployed NHBCAP01
+→ accounting.js
+→ transport.js
+→ SAP Destination Service
+→ Integration Suite
+→ mock S/4HANA
+→ SAP-style confirmation
+→ SAP response parser
+→ HANA persistence
+
+The returned accounting event contained:
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+This proves that the integration was initiated by the deployed NHBCAP01 application rather than by an independent manual HTTP test.
+
+### Reversal verification
+
+The same architecture was verified for PAYMENT_REVERSED.
+
+The reversal path first requires the original PAYMENT_RECEIVED accounting event to have:
+
+postingStatus = POSTED
+
+and a complete SAP document identity:
+
+externalAccountingDocument
+
+externalCompanyCode
+
+externalFiscalYear
+
+The original posting was successfully completed through Integration Suite.
+
+The matching PAYMENT_REVERSED event was then submitted using:
+
+postAccountingEvent
+
+The returned event contained:
+
+eventType:
+PAYMENT_REVERSED
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+This verifies both normal posting and reversal through the same deployed Integration Suite mediation architecture.
+
+### SAP regression baseline
+
+The SAP accounting regression suite was executed after introducing the SAP-safe document reference.
+
+Relevant tests cover:
+
+- accounting configuration validation
+- accounting-event mapping
+- SAP document-reference constraints
+- journal-entry SOAP construction
+- journal-entry response parsing
+- reversal SOAP construction
+- reversal validation
+- transport configuration
+- Basic transport
+- SAP Destination transport
+- posting orchestration
+- reversal orchestration
+
+Verified result:
+
+44 tests
+44 passed
+0 failed
+
+This regression result establishes the local implementation baseline before deployed end-to-end verification.
+
+### Integration Suite verification progression
+
+The Integration Suite capability was verified incrementally.
+
+First:
+
+BAS
+→ Integration Suite
+→ mock S/4HANA
+
+using a minimal SOAP request.
+
+Then:
+
+NHBCAP01 journal-entry SOAP builder
+→ Integration Suite
+→ mock S/4HANA
+
+using the actual project SOAP generator.
+
+Finally:
+
+deployed NHBCAP01
+→ SAP Destination Service
+→ Integration Suite
+→ mock S/4HANA
+→ NHBCAP01 persistence
+
+using a real MurabahaAccountingEvent.
+
+Both PAYMENT_RECEIVED and PAYMENT_REVERSED were verified at the final application level.
+
+### Failure evidence and architectural learning
+
+Several controlled failures were encountered during verification and were useful in validating architectural boundaries.
+
+Wrong OAuth client:
+
+Integration Suite returned 401 because the token audience belonged to NHBCAP01 XSUAA rather than the Integration Suite runtime.
+
+Stopped mock receiver:
+
+Integration Suite returned 500 with an underlying Cloud Foundry 404 because the receiver route had no running application instance.
+
+Missing local Destination binding:
+
+A BAS-local Node process could not resolve the SAP Destination because the process did not inherit the Cloud Foundry Destination service binding.
+
+Missing SAP accounting configuration:
+
+The deployed CAP action failed before reaching Integration Suite because required SAP_ACCOUNTING_* variables had not yet been configured.
+
+Oversized SAP reference:
+
+The SOAP builder rejected the NHBCAP01 correlation ID because it exceeded the SAP 16-character DocumentReferenceID limit.
+
+Old deployed source:
+
+Restarting the Cloud Foundry application did not deploy the local source-code change. A full MTA build and deployment was required.
+
+These cases confirm that authentication, business configuration, destination resolution, message contract validation, receiver availability, and deployment lifecycle are distinct operational concerns.
+
+### Current baseline status
+
+The Integration Suite Phase 1 baseline is now verified.
+
+Verified:
+
+- Cloud Integration capability provisioned
+- Process Integration Runtime configured
+- runtime service key configured
+- ESBMessaging.send authorization established
+- HTTPS sender configured
+- SOAP receiver configured
+- Integration Suite runtime endpoint verified
+- mock S/4HANA receiver deployed
+- Destination Service integration configured
+- OAuth2 Client Credentials flow verified
+- NHBCAP01 destination-based transport verified
+- real NHBCAP01 SOAP payload verified
+- PAYMENT_RECEIVED verified end to end
+- PAYMENT_REVERSED verified end to end
+- SAP document identity persisted
+- SAP-safe reference mapping implemented
+- SAP regression suite 44/44 PASS
+
+### Current limitation
+
+The current endpoint is a controlled mock SAP S/4HANA receiver.
+
+Therefore the project has verified:
+
+- NHBCAP01 accounting behavior
+- SAP SOAP contract generation
+- enterprise mediation through Integration Suite
+- Destination Service usage
+- OAuth runtime authentication
+- synchronous request-response handling
+- posting and reversal orchestration
+- persistence of SAP-style document identity
+
+The project has not yet proven execution against a live SAP S/4HANA Journal Entry service.
+
+Live SAP execution remains a future milestone.
+
+### Future evolution
+
+The current Phase 1 architecture intentionally preserves SAP-specific mapping and SOAP generation inside NHBCAP01 because that implementation was already tested and governed.
+
+A later architecture phase may introduce a more provider-independent canonical accounting message:
+
+NHBCAP01 canonical accounting event
+→ Integration Suite
+→ SAP-specific transformation
+→ SAP S/4HANA SOAP API
+
+That evolution would move more SAP-specific mediation responsibility into Integration Suite.
+
+Such a change should only be introduced when it improves separation of concerns, reuse, governance, or operational management rather than merely relocating code.
+
+Additional future improvements may include:
+
+- correlation-ID propagation through Integration Suite
+- structured integration error mapping
+- enhanced message monitoring
+- retry and idempotency policy
+- dead-letter or recovery strategy where appropriate
+- integration-specific observability
+- production credential governance
+- API Management where external API governance justifies it
+- replacement of the mock receiver with live SAP S/4HANA
+- formal architecture-to-implementation evidence in AV-03
+
+### Architecture significance
+
+This baseline demonstrates that NHBCAP01 is no longer only a CAP application capable of generating SAP-compatible SOAP.
+
+It now demonstrates an enterprise integration architecture in which:
+
+business-domain behavior remains owned by NHBCAP01
+
+SAP connectivity is abstracted through Destination Service
+
+enterprise mediation is provided by SAP Integration Suite
+
+external accounting execution is separated from the banking domain
+
+runtime authentication is independently governed
+
+technical failures are observable at defined architecture boundaries
+
+The result is a stronger implementation of the target architecture:
+
+Banking domain
+→ accounting integration boundary
+→ enterprise mediation
+→ SAP accounting platform
+
+This establishes the current verified SAP Integration Suite baseline for NHBCAP01.
+
+---
 ## 13. Key Architecture Decisions
 
 The following decisions define the current NHBCAP01 architecture.

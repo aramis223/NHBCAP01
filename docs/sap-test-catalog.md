@@ -745,11 +745,753 @@ The deployed verification does not constitute live SAP posting evidence. `SAP-T0
 
 The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
 
-## 8. Regression rule
+## 8. SAP Integration Suite End-to-End Verification
+
+### Scope
+
+This section records the verified SAP Integration Suite mediation baseline for NHBCAP01.
+
+The tested runtime path is:
+
+NHBCAP01
+→ SAP Destination Service
+→ SAP Integration Suite
+→ SOAP receiver
+→ mock SAP S/4HANA Journal Entry endpoint
+→ SAP-style confirmation
+→ NHBCAP01 response parsing
+→ MurabahaAccountingEvent persistence
+
+The current target is a controlled mock receiver rather than a live SAP S/4HANA system.
+
+---
+
+## 1. Integration Suite Smoke Test
+
+### Purpose
+
+Verify that the deployed Integration Suite iFlow accepts an authenticated SOAP/XML request and successfully forwards it to the configured receiver.
+
+### Runtime endpoint
+
+https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry
+
+### Result
+
+PASS
+
+Verified response:
+
+HTTP 200
+
+AccountingDocument:
+1900000001
+
+CompanyCode:
+1000
+
+FiscalYear:
+2026
+
+BusinessDocumentProcessingResultCode:
+SUCCESS
+
+### Evidence
+
+The request was sent from BAS using a valid Integration Suite OAuth bearer token.
+
+The response was returned through Integration Suite from the mock S/4HANA receiver.
+
+### Conclusion
+
+The following path is verified:
+
+BAS
+→ Integration Suite
+→ mock S/4HANA
+→ Integration Suite
+→ BAS
+
+---
+
+## 2. NHBCAP01 SOAP Builder Through Integration Suite
+
+### Purpose
+
+Verify that the real NHBCAP01 journal-entry SOAP builder produces a payload accepted by the Integration Suite mediation flow.
+
+### Source
+
+srv/sap/journal-entry-soap.js
+
+### Test payload
+
+A journal-entry SOAP request was generated using:
+
+buildJournalEntrySoapRequest(...)
+
+The generated payload was written to:
+
+/tmp/nhb-journal-entry.xml
+
+Verified size:
+
+2094 bytes
+
+### Result
+
+PASS
+
+HTTP 200
+
+Returned confirmation:
+
+AccountingDocument:
+1900000001
+
+CompanyCode:
+1000
+
+FiscalYear:
+2026
+
+BusinessDocumentProcessingResultCode:
+SUCCESS
+
+### Conclusion
+
+The following path is verified:
+
+NHBCAP01 SOAP builder
+→ Integration Suite
+→ mock S/4HANA
+→ SAP-style confirmation
+
+---
+
+## 3. SAP DocumentReferenceID Constraint
+
+### Issue
+
+A real Murabaha accounting event used a correlation identifier longer than the SAP SOAP contract allows.
+
+Example:
+
+PAY-SVC-002-20260925185040-25064
+
+The journal-entry builder enforces:
+
+DocumentReferenceID maximum length = 16
+
+The original mapping used:
+
+accountingEvent.correlationId
+
+This caused:
+
+Journal entry field reference exceeds SAP maximum length 16
+
+### Resolution
+
+A deterministic SAP-safe reference is now derived from the accounting event UUID.
+
+Rule:
+
+remove hyphens from accountingEvent.ID
+→ take the first 16 characters
+
+Example:
+
+Accounting Event ID:
+
+243909b6-5b78-4a88-ae32-854abced75de
+
+SAP DocumentReferenceID:
+
+243909b65b784a88
+
+The full correlationId remains persisted in NHBCAP01.
+
+### Regression result
+
+PASS
+
+The SAP accounting regression suite was updated to reflect the new outbound reference contract.
+
+---
+
+## 4. SAP Accounting Regression Baseline
+
+### Test command
+
+node --test \
+  sap-journal-entry-soap.test.js \
+  sap-journal-entry-response.test.js \
+  sap-journal-entry-reversal-soap.test.js \
+  sap-transport.test.js \
+  sap-accounting.test.js
+
+### Result
+
+44 tests
+
+44 passed
+
+0 failed
+
+0 skipped
+
+0 cancelled
+
+### Coverage
+
+The regression suite verifies:
+
+- accounting configuration validation
+- SAP-safe document reference generation
+- PAYMENT_RECEIVED mapping
+- PAYMENT_REVERSED mapping
+- unsupported accounting-event rejection
+- invalid accounting amount rejection
+- environment configuration loading
+- journal-entry orchestration
+- reversal configuration
+- original SAP document identity validation
+- reversal company-code validation
+- journal-entry response parsing
+- SAP business-failure handling
+- SOAP fault handling
+- incomplete response handling
+- journal-entry reversal validation
+- SAP field-length validation
+- currency validation
+- journal-entry SOAP construction
+- XML escaping
+- Basic authorization
+- destination transport configuration
+- Basic HTTP transport
+- SAP Destination transport
+- HTTP error handling
+
+### Conclusion
+
+PASS
+
+The SAP accounting implementation remained regression-clean after introducing the SAP-safe document reference.
+
+---
+
+## 5. Destination Service Configuration Verification
+
+### Destination
+
+NHB-INTEGRATION-SUITE-S4
+
+### Authentication
+
+OAuth2ClientCredentials
+
+### Target
+
+SAP Integration Suite runtime endpoint
+
+### Result
+
+PASS
+
+The Destination service was successfully resolved by the deployed NHBCAP01 application.
+
+### Conclusion
+
+The following runtime abstraction is verified:
+
+NHBCAP01
+→ destination name
+→ SAP Destination Service
+→ OAuth2 Client Credentials
+→ Integration Suite
+
+---
+
+## 6. Deployed PAYMENT_RECEIVED End-to-End Test
+
+### Purpose
+
+Verify that a real persisted MurabahaAccountingEvent can be posted from the deployed NHBCAP01 application through the complete Integration Suite path.
+
+### Event
+
+Event type:
+
+PAYMENT_RECEIVED
+
+Accounting Event ID:
+
+c41bf8cb-8095-46a5-8b27-db5ce293b9b8
+
+Amount:
+
+USD 600.00
+
+### Invocation
+
+The deployed CAP action was called:
+
+postAccountingEvent
+
+### Result
+
+PASS
+
+Returned accounting event:
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+### Conclusion
+
+The following full application path is verified:
+
+deployed NHBCAP01
+→ postAccountingEvent
+→ accounting.js
+→ transport.js
+→ SAP Destination Service
+→ SAP Integration Suite
+→ mock S/4HANA
+→ SAP-style confirmation
+→ SAP response parser
+→ HANA persistence
+
+---
+
+## 7. Original Payment Posting Before Reversal
+
+### Purpose
+
+Establish the SAP document identity required by the reversal path.
+
+### Event
+
+Accounting Event ID:
+
+7b9174b1-427c-48d7-bca1-808e00300d70
+
+Event type:
+
+PAYMENT_RECEIVED
+
+Amount:
+
+USD 400.00
+
+Payment ID:
+
+acc95f60-26b2-4ebf-8467-688ee7cee52d
+
+### Result
+
+PASS
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+### Conclusion
+
+The original SAP accounting identity was persisted successfully and made available to the reversal implementation.
+
+---
+
+## 8. PAYMENT_REVERSED End-to-End Test
+
+### Purpose
+
+Verify that a real PAYMENT_REVERSED accounting event can be posted through the same Integration Suite mediation architecture.
+
+### Event
+
+Accounting Event ID:
+
+2accd0ac-298f-47cc-bff7-c0924a19f25b
+
+Event type:
+
+PAYMENT_REVERSED
+
+Amount:
+
+USD 400.00
+
+Payment ID:
+
+acc95f60-26b2-4ebf-8467-688ee7cee52d
+
+### Preconditions
+
+The corresponding PAYMENT_RECEIVED event was already:
+
+postingStatus:
+POSTED
+
+and contained:
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+### Result
+
+PASS
+
+Returned reversal event:
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+### Conclusion
+
+The reversal path is verified through:
+
+NHBCAP01
+→ SAP Destination Service
+→ SAP Integration Suite
+→ mock S/4HANA
+→ SAP-style reversal confirmation
+→ NHBCAP01 persistence
+
+---
+
+## 9. Authentication Failure Test
+
+### Scenario
+
+A NHBCAP01 XSUAA token was accidentally used against the Integration Suite runtime endpoint.
+
+### Result
+
+PASS — expected failure observed
+
+HTTP status:
+
+401 Unauthorized
+
+The Integration Suite runtime rejected the token because its JWT audience belonged to the NHBCAP01 XSUAA client rather than the Integration Suite runtime client.
+
+### Conclusion
+
+The architecture correctly enforces separate OAuth security contexts for:
+
+- NHBCAP01 inbound authentication
+- Integration Suite runtime authentication
+
+---
+
+## 10. Receiver Availability Failure Test
+
+### Scenario
+
+The mock S/4HANA Cloud Foundry application was stopped.
+
+### Result
+
+PASS — expected failure observed
+
+Integration Suite returned:
+
+500 Internal Server Error
+
+The underlying receiver error was:
+
+404 Not Found
+
+Requested route:
+
+nhb-mock-s4.cfapps.us10-001.hana.ondemand.com
+
+### Recovery
+
+The receiver application was restarted:
+
+cf start nhb-mock-s4
+
+After restart, the same Integration Suite request returned:
+
+HTTP 200
+
+### Conclusion
+
+Integration Suite correctly surfaced downstream receiver unavailability.
+
+---
+
+## 11. Local Destination Binding Failure
+
+### Scenario
+
+The SAP destination-based transport was executed directly from a BAS-local Node process.
+
+### Result
+
+PASS — expected limitation observed
+
+Error:
+
+Could not find service binding of type 'destination'
+
+### Cause
+
+The local Node process did not inherit the Cloud Foundry Destination service binding.
+
+### Resolution
+
+The destination-based transport was tested through the deployed NHBCAP01-srv application, where the Destination service is bound.
+
+### Conclusion
+
+The verified application-level test environment is Cloud Foundry rather than an unbound local BAS process.
+
+---
+
+## 12. Missing SAP Accounting Configuration Failure
+
+### Scenario
+
+The deployed postAccountingEvent action was invoked before SAP_ACCOUNTING_* environment variables were configured.
+
+### Result
+
+PASS — expected failure observed
+
+Error:
+
+SAP accounting configuration is missing:
+companyCode,
+documentType,
+businessTransactionType,
+createdByUser,
+debitAccount,
+creditAccount
+
+### Resolution
+
+The following variables were configured:
+
+SAP_ACCOUNTING_COMPANY_CODE=1000
+
+SAP_ACCOUNTING_DOCUMENT_TYPE=SA
+
+SAP_ACCOUNTING_BUSINESS_TRANSACTION_TYPE=RFBU
+
+SAP_ACCOUNTING_CREATED_BY_USER=NHBCAP01
+
+SAP_ACCOUNTING_DEBIT_ACCOUNT=110000
+
+SAP_ACCOUNTING_CREDIT_ACCOUNT=410000
+
+SAP_ACCOUNTING_REVERSAL_REASON=01
+
+### Conclusion
+
+Accounting execution correctly fails before outbound transport when mandatory business configuration is incomplete.
+
+---
+
+## 13. HANA Connection Timeout Observation
+
+### Scenario
+
+Database-backed OData requests temporarily failed.
+
+### Result
+
+Observed failure:
+
+500 Internal Server Error
+
+Runtime log:
+
+TimeoutError: ResourceRequest timed out
+
+### Validation
+
+The failure affected multiple database-backed entities and was therefore not specific to MurabahaAccountingEvent.
+
+After database connectivity recovered, the same request returned:
+
+HTTP 200
+
+### Conclusion
+
+The failure was isolated to HANA/database availability rather than Integration Suite.
+
+---
+
+## 14. Deployment Lifecycle Verification
+
+### Scenario
+
+The source code was modified locally and the Cloud Foundry application was restarted.
+
+### Observation
+
+The old behavior remained active.
+
+### Cause
+
+cf restart does not upload changed source code.
+
+### Resolution
+
+A new MTA build and deployment were performed:
+
+mbt build
+
+cf deploy mta_archives/*.mtar -f
+
+### Verification
+
+The Cloud Foundry application showed a new:
+
+last uploaded
+
+timestamp.
+
+### Conclusion
+
+Source changes require a real deployment rather than only an application restart.
+
+---
+
+## 15. Integration Suite Verification Summary
+
+The following verification stages are complete:
+
+PASS — Integration Suite runtime authentication
+
+PASS — HTTPS sender endpoint
+
+PASS — SOAP receiver routing
+
+PASS — mock S/4HANA connectivity
+
+PASS — manual SOAP smoke test
+
+PASS — real NHBCAP01 SOAP builder through Integration Suite
+
+PASS — SAP Destination Service resolution
+
+PASS — OAuth2 Client Credentials through Destination Service
+
+PASS — SAP-safe DocumentReferenceID mapping
+
+PASS — 44/44 SAP regression suite
+
+PASS — deployed PAYMENT_RECEIVED posting
+
+PASS — SAP document identity persistence
+
+PASS — deployed PAYMENT_REVERSED posting
+
+PASS — expected authentication failure handling
+
+PASS — expected receiver failure handling
+
+PASS — expected missing-configuration handling
+
+PASS — deployment lifecycle verification
+
+---
+
+## 16. Current Test Baseline
+
+As of 30 September 2026:
+
+SAP accounting regression:
+
+44 PASS
+0 FAIL
+
+Integration Suite smoke test:
+
+PASS
+
+NHBCAP01 SOAP builder through Integration Suite:
+
+PASS
+
+Deployed PAYMENT_RECEIVED through Integration Suite:
+
+PASS
+
+Deployed PAYMENT_REVERSED through Integration Suite:
+
+PASS
+
+Current receiver:
+
+controlled mock SAP S/4HANA endpoint
+
+Live SAP S/4HANA Journal Entry execution:
+
+PENDING
+
+The current baseline demonstrates a complete application-level mediation path through SAP Integration Suite while preserving a clear distinction between verified mock execution and future live SAP execution.
+
+## 17. Regression rule
 
 Every successful test becomes a repeatable regression scenario. Record the test date, S/4HANA environment, payload reference, returned identifier, result, and any configuration dependencies.
 
-## 9. Sources
+## 18. Sources
 
 - [Business Partner (A2X) API](https://help.sap.com/docs/SAP_S4HANA_CLOUD/3c916ef10fc240c9afc594b346ffaf77/85043858ea0f9244e10000000a4450e5.html)
 - [Cash Flow API](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/d4eb54ea54944b04923af573b28a1e7d/80ea959a2ccf4bb29e88bf0225679283.html)
