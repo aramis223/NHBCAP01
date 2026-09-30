@@ -5,7 +5,7 @@ const {
     JOURNAL_ENTRY_SOAP_ACTION,
     getSapTransportConfig,
     buildBasicAuthorization,
-    postSoapRequest
+    postSoapRequest,
 } = require('./srv/sap/transport');
 
 test('builds Basic authorization header', () => {
@@ -155,6 +155,9 @@ test('posts SOAP XML using basic transport and returns raw response text', async
                     'https://example.test/sap/journal-entry',
                 username: 'user',
                 password: 'secret'
+            },
+            {
+                correlationId: 'NHB-CORR-001'
             }
         );
 
@@ -201,6 +204,11 @@ test('posts SOAP XML using SAP destination transport', async () => {
         destination,
         request
     ) => {
+        assert.equal(
+            request.headers['X-Correlation-ID'],
+            'NHB-CORR-002'
+        );
+
         assert.deepEqual(destination, {
             destinationName: 'NHB-S4-JOURNAL'
         });
@@ -234,7 +242,10 @@ test('posts SOAP XML using SAP destination transport', async () => {
             mode: 'destination',
             destinationName: 'NHB-S4-JOURNAL'
         },
-        fakeHttpExecutor
+        fakeHttpExecutor,
+        {
+            correlationId: 'NHB-CORR-002'
+        }
     );
 
     assert.equal(

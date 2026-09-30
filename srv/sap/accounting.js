@@ -237,7 +237,11 @@ async function postJournalEntry(
     const responseXml = await postSoapRequest(
         xml,
         options.transportConfig,
-        options.httpExecutor
+        options.httpExecutor,
+        {
+            correlationId:
+                accountingEvent.correlationId
+        }
     );
 
     return parseJournalEntryResponse(responseXml);
@@ -270,7 +274,11 @@ async function postJournalEntryReversal(
         await postSoapRequest(
             xml,
             options.transportConfig,
-            options.httpExecutor
+            options.httpExecutor,
+            {
+                correlationId:
+                    accountingEvent.correlationId
+            }
         );
 
     return parseJournalEntryResponse(

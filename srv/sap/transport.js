@@ -57,7 +57,8 @@ function buildBasicAuthorization(username, password) {
 async function postSoapRequest(
     xml,
     transportConfig,
-    httpExecutor = executeHttpRequest
+    httpExecutor = executeHttpRequest,
+    requestContext = {}
 ) {
     if (!xml) {
         throw new Error('SOAP request XML is required');
@@ -65,6 +66,14 @@ async function postSoapRequest(
 
     const config =
         transportConfig || getSapTransportConfig();
+
+    const correlationHeaders =
+        requestContext.correlationId
+            ? {
+                'X-Correlation-ID':
+                    requestContext.correlationId
+            }
+            : {};
 
     if (config.mode === 'destination') {
         const response =
@@ -81,8 +90,9 @@ async function postSoapRequest(
                             'text/xml; charset=utf-8',
                         Accept: 'text/xml',
                         SOAPAction:
-                            JOURNAL_ENTRY_SOAP_ACTION
-                    },
+                            JOURNAL_ENTRY_SOAP_ACTION,
+                        ...correlationHeaders
+                        },
                     data: xml
                 }
             );
@@ -106,7 +116,8 @@ async function postSoapRequest(
                     'text/xml; charset=utf-8',
                 Accept: 'text/xml',
                 SOAPAction:
-                    JOURNAL_ENTRY_SOAP_ACTION
+                    JOURNAL_ENTRY_SOAP_ACTION,
+                ...correlationHeaders
             },
             body: xml
         }
