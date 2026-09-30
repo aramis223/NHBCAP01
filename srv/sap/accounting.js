@@ -15,6 +15,18 @@ const {
     postSoapRequest
 } = require('./transport');
 
+function buildSapDocumentReference(accountingEvent) {
+    if (!accountingEvent?.ID) {
+        throw new Error(
+            'Accounting event ID is required for SAP document reference'
+        );
+    }
+
+    return accountingEvent.ID
+        .replaceAll('-', '')
+        .slice(0, 16);
+}
+
 function validateAccountingConfig(accountingConfig) {
     const requiredFields = [
         'companyCode',
@@ -90,7 +102,7 @@ function mapAccountingEventToJournalEntry(
         amount,
         debitAccount: accountingConfig.debitAccount,
         creditAccount: accountingConfig.creditAccount,
-        reference: accountingEvent.correlationId,
+        reference: buildSapDocumentReference(accountingEvent),
         nhbAccountingEventId: accountingEvent.ID,
         nhbPaymentId: accountingEvent.payment_ID,
         nhbFinancingId: accountingEvent.financing_ID,
@@ -273,5 +285,6 @@ module.exports = {
     validateAccountingReversalConfig,
     mapAccountingEventToJournalEntry,
     mapAccountingEventToJournalEntryReversal,
-    createSoapMessageContext
+    createSoapMessageContext,
+    buildSapDocumentReference
 };

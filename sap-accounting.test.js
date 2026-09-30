@@ -5,7 +5,8 @@ const {
     postJournalEntry,
     postJournalEntryReversal,
     validateAccountingReversalConfig,
-    mapAccountingEventToJournalEntryReversal
+    mapAccountingEventToJournalEntryReversal,
+    buildSapDocumentReference
 } = require('./srv/sap/accounting');
 
 const {
@@ -67,6 +68,18 @@ test('validates complete accounting configuration', () => {
     assert.deepEqual(result, validConfig);
 });
 
+test(
+    'builds deterministic SAP document reference from accounting event ID',
+    () => {
+        assert.equal(
+            buildSapDocumentReference({
+                ID: '243909b6-5b78-4a88-ae32-854abced75de'
+            }),
+            '243909b65b784a88'
+        );
+    }
+);
+
 test('rejects incomplete accounting configuration', () => {
     assert.throws(
         () => validateAccountingConfig({
@@ -122,7 +135,7 @@ test(
         );
         assert.equal(
             result.reference,
-            'PAY-SVC-TEST-001'
+            '1111111111111111'
         );
         assert.equal(
             result.nhbAccountingEventId,
@@ -163,7 +176,7 @@ test(
         );
         assert.equal(
             result.reference,
-            'REV-SVC-TEST-001'
+            '1111111111111111'
         );
     }
 );
