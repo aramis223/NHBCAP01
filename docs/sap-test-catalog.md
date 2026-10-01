@@ -383,7 +383,7 @@ The current automated regression baseline verifies both normal journal-entry pos
 
 Current verified test baseline:
 
-- SAP accounting/integration regression: **43 passed, 0 failed**
+- SAP accounting/integration regression: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -675,7 +675,7 @@ The outbound timeout baseline has additionally been verified through:
 
 Current verified regression baseline:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -756,7 +756,9 @@ The tested runtime path is:
 NHBCAP01
 → SAP Destination Service
 → SAP Integration Suite
-→ SOAP receiver
+→ X-Correlation-ID propagation
+→ NHB_CorrelationId MPL custom property
+→ HTTP receiver
 → mock SAP S/4HANA Journal Entry endpoint
 → SAP-style confirmation
 → NHBCAP01 response parsing
@@ -1412,7 +1414,137 @@ Source changes require a real deployment rather than only an application restart
 
 ---
 
-## 15. Integration Suite Verification Summary
+## 15. Correlation and HTTP Receiver Verification
+
+### Purpose
+
+Verify end-to-end operational traceability for SAP accounting messages and confirm the Phase 1 HTTP receiver design.
+
+### Correlation source
+
+The originating NHBCAP01 accounting event contains:
+
+correlationId
+
+The accounting layer passes this value into the SAP transport request context.
+
+The transport propagates it as:
+
+X-Correlation-ID
+
+### Integration Suite configuration
+
+The iFlow Runtime Configuration permits:
+
+X-Correlation-ID
+
+as an allowed header.
+
+A Groovy step reads the header and creates the searchable Message Processing Log custom property:
+
+NHB_CorrelationId
+
+Repository source:
+
+srv/integration/setNhbCorrelationMpl.groovy
+
+### Verified test fixture
+
+A fresh accounting event was generated using:
+
+test/integration-suite-accounting-fixture.sh
+
+Verified identifiers included:
+
+ACCOUNTING_EVENT_ID:
+e7a31f2d-98b9-432a-ba09-62169b222308
+
+CORRELATION_ID:
+PAY-IS-20260930234523-55694
+
+Initial status:
+
+PENDING
+
+### Integration Suite result
+
+PASS
+
+Verified Message Processing Log evidence:
+
+OverallStatus:
+COMPLETED
+
+IntermediateError:
+false
+
+CustomHeaderProperties:
+
+NHB_CorrelationId =
+PAY-IS-20260930234523-55694
+
+### Receiver result
+
+The iFlow used an HTTP receiver to forward the SAP SOAP/XML payload unchanged to:
+
+https://nhb-mock-s4.cfapps.us10-001.hana.ondemand.com/journal-entry
+
+This preserves the current Phase 1 responsibility boundary:
+
+NHBCAP01 owns SOAP request construction and SAP response parsing.
+
+Integration Suite owns mediation, routing, monitoring, endpoint abstraction, and correlation observability.
+
+### CAP persistence result
+
+The same accounting event was verified after Integration Suite processing.
+
+Result:
+
+postingStatus:
+POSTED
+
+externalAccountingDocument:
+1900000001
+
+externalCompanyCode:
+1000
+
+externalFiscalYear:
+2026
+
+externalAccountingDocumentId:
+1000-2026-1900000001
+
+errorMessage:
+null
+
+The same NHB correlation identifier remained persisted on the accounting event.
+
+### Conclusion
+
+PASS
+
+The following observability path is verified:
+
+MurabahaAccountingEvent.correlationId
+→ accounting.js
+→ transport.js
+→ X-Correlation-ID
+→ SAP Destination Service
+→ SAP Integration Suite
+→ Allowed Header
+→ Groovy MPL enrichment
+→ NHB_CorrelationId
+→ HTTP receiver
+→ mock S/4HANA
+→ SAP-style response
+→ NHBCAP01 response parser
+→ HANA persistence
+
+---
+
+## 16. Integration Suite Verification Summary
 
 The following verification stages are complete:
 
@@ -1420,7 +1552,13 @@ PASS — Integration Suite runtime authentication
 
 PASS — HTTPS sender endpoint
 
-PASS — SOAP receiver routing
+PASS — HTTP receiver routing
+
+PASS — X-Correlation-ID propagation
+
+PASS — NHB_CorrelationId MPL custom property
+
+PASS — renewable accounting-event fixture
 
 PASS — mock S/4HANA connectivity
 
@@ -1452,7 +1590,7 @@ PASS — deployment lifecycle verification
 
 ---
 
-## 16. Current Test Baseline
+## 17. Current Test Baseline
 
 As of 30 September 2026:
 
@@ -1487,11 +1625,11 @@ PENDING
 
 The current baseline demonstrates a complete application-level mediation path through SAP Integration Suite while preserving a clear distinction between verified mock execution and future live SAP execution.
 
-## 17. Regression rule
+## 18. Regression rule
 
 Every successful test becomes a repeatable regression scenario. Record the test date, S/4HANA environment, payload reference, returned identifier, result, and any configuration dependencies.
 
-## 18. Sources
+## 19. Sources
 
 - [Business Partner (A2X) API](https://help.sap.com/docs/SAP_S4HANA_CLOUD/3c916ef10fc240c9afc594b346ffaf77/85043858ea0f9244e10000000a4450e5.html)
 - [Cash Flow API](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/d4eb54ea54944b04923af573b28a1e7d/80ea959a2ccf4bb29e88bf0225679283.html)

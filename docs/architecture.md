@@ -613,7 +613,7 @@ The verified baseline includes:
 
 Current verified regression baseline:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -2417,7 +2417,7 @@ The application-side integration has been verified through isolated SAP-layer te
 
 Current verified regression baseline:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -2487,7 +2487,7 @@ The verified runtime path is:
 NHBCAP01
 → SAP Destination Service
 → SAP Integration Suite
-→ SOAP receiver
+→ HTTP receiver
 → SAP S/4HANA-compatible endpoint
 
 For the current verification baseline, the final SAP S/4HANA endpoint is represented by a controlled mock receiver deployed on SAP BTP Cloud Foundry.
@@ -2511,7 +2511,7 @@ Murabaha payment or reversal
 → srv/sap/transport.js
 → SAP Destination Service
 → NHB - S4 Journal Entry Mediation
-→ SOAP receiver
+→ HTTP receiver
 → mock SAP S/4HANA
 → SAP-style confirmation
 → NHBCAP01 response parser
@@ -2605,7 +2605,7 @@ NHBCAP01
 → SAP Destination Service
 → OAuth2 Client Credentials
 → Integration Suite runtime
-→ SOAP receiver
+→ HTTP receiver
 → target system
 
 This avoids embedding Integration Suite client credentials directly in the CAP application.
@@ -2907,7 +2907,7 @@ Verified:
 - runtime service key configured
 - ESBMessaging.send authorization established
 - HTTPS sender configured
-- SOAP receiver configured
+- HTTP receiver configured
 - Integration Suite runtime endpoint verified
 - mock S/4HANA receiver deployed
 - Destination Service integration configured
@@ -2954,9 +2954,16 @@ That evolution would move more SAP-specific mediation responsibility into Integr
 
 Such a change should only be introduced when it improves separation of concerns, reuse, governance, or operational management rather than merely relocating code.
 
+The Phase 1 observability baseline now includes:
+
+- propagation of `MurabahaAccountingEvent.correlationId` as `X-Correlation-ID`
+- preservation of the correlation header through SAP Destination transport
+- Integration Suite Runtime Configuration allowing `X-Correlation-ID`
+- Groovy MPL enrichment as searchable `NHB_CorrelationId`
+- verified correlation continuity from NHBCAP01 to Integration Suite monitoring
+
 Additional future improvements may include:
 
-- correlation-ID propagation through Integration Suite
 - structured integration error mapping
 - enhanced message monitoring
 - retry and idempotency policy
@@ -3224,7 +3231,7 @@ For successful normal posting and reversal, NHBCAP01 persists:
 
 The current automated regression baseline is:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
