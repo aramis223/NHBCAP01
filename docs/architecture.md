@@ -1,4 +1,5 @@
 # NHBCAP01 — Architecture
+
 ## 1. Purpose
 
 NHBCAP01 is the application and integration layer for the NHB banking architecture learning environment.
@@ -9,12 +10,16 @@ The current external banking platform is Fiserv Banking Hub / Finxact.
 
 The architecture is designed so that NHB consumers depend on NHB-owned service contracts rather than directly on provider-specific APIs, authentication mechanisms, or data structures.
 
-The project currently validates two primary integration capabilities:
+The verified Fiserv scope covers two primary integration capabilities:
 
 - Account retrieval through Fiserv Accounts
 - Customer/accountholder retrieval through Fiserv Accountholder
 
-The architecture also provides the foundation for future integration with SAP S/4HANA and additional NHB capability domains.
+SAP accounting posting and reversal are also implemented and verified through SAP Destination Service and SAP Integration Suite mediation to a controlled mock S/4HANA receiver. Execution against a live SAP S/4HANA Journal Entry service remains pending.
+
+`AV-03 — NHBCAP01 Architecture-to-Implementation Realization` is completed as v1.0, and the first deep-understanding pass through CAP internals is completed. Portfolio packaging and documentation polish are now the current phase.
+
+Additional NHB capability domains and SAP enterprise integrations remain selective future extensions.
 
 ---
 ## 2. Architecture Principles
@@ -128,7 +133,7 @@ Each capability should be validated locally before being promoted to the deploye
 
 ### 2.6 Security boundaries
 
-NHBCAP01 currently uses two independent authentication boundaries:
+The Fiserv integration path uses two independent authentication boundaries:
 
 ```text
 External Consumer
@@ -143,7 +148,7 @@ NHBCAP01
 Fiserv Banking Hub / Finxact
 ```
 
-Consumer authentication and provider authentication are therefore separate architectural concerns.
+Consumer authentication and provider authentication are therefore separate architectural concerns. The SAP mediation path adds an independent Integration Suite runtime OAuth context, described in section 12.6.
 
 No Fiserv API credentials, secrets, or access tokens are stored in project documentation.
 
@@ -152,7 +157,7 @@ No Fiserv API credentials, secrets, or access tokens are stored in project docum
 
 NHBCAP01 currently operates across local SAP Business Application Studio development and SAP BTP Cloud Foundry deployment environments.
 
-The main architectural components are:
+The persistence and Fiserv components are shown below. The implemented SAP accounting path is described in sections 5.1 and 12.6:
 
 ```text
                          NHB Consumer
@@ -177,7 +182,7 @@ The main architectural components are:
 
 ### 3.1 CAP application structure
 
-The current service implementation separates the CAP service layer from provider-specific integration modules.
+The current service implementation separates the CAP service layer from provider-specific integration modules. The following view focuses on the Fiserv modules; SAP accounting modules are detailed in section 5.1, with shared HTTP controls under `srv/integration/`.
 
 ```text
 NHBCAP01
@@ -2078,7 +2083,7 @@ A consumer's XSUAA token is therefore not reused as the Fiserv provider credenti
 
 ### 11.4 Two-boundary security model
 
-The complete security model is:
+The Fiserv two-boundary security model is:
 
 ```text
 NHB Consumer
@@ -2151,7 +2156,7 @@ The current Fiserv client uses its runtime configuration directly for external A
 
 Destination Service is not a dependency of the current Fiserv runtime path.
 
-For SAP S/4HANA accounting, NHBCAP01 already implements Destination-aware transport through the SAP Cloud SDK. The required SAP BTP Destination configuration and live connectivity remain pending laboratory verification.
+For SAP accounting, NHBCAP01 implements Destination-aware transport through the SAP Cloud SDK. Destination `NHB-INTEGRATION-SUITE-S4` and OAuth2 Client Credentials connectivity through Integration Suite to the controlled mock receiver are verified. Connectivity and accounting execution against a live SAP S/4HANA system remain pending external verification.
 
 ### 11.8 Deployment verification
 
@@ -2195,7 +2200,7 @@ This prevents planned components from being represented as current operational d
 
 ### 12.1 Current verified architecture
 
-The current architecture is:
+The current persistence and Fiserv paths are:
 
 ```text
                          NHB Consumers
@@ -2221,6 +2226,29 @@ The current architecture is:
                                    Accounts    Accountholder
 ```
 
+The current SAP accounting path is also implemented and verified:
+
+```text
+MurabahaAccountingEvent
+        │
+        ▼
+postAccountingEvent / SAP accounting adapter
+        │
+        ▼
+SAP Destination Service
+        │
+        ▼
+SAP Integration Suite mediation
+        │
+        ▼
+Controlled mock S/4HANA receiver
+        │
+        ▼
+SAP-style confirmation / NHB persistence
+```
+
+The mock receiver verifies the mediation and application path; it does not prove live SAP accounting execution.
+
 The following capabilities have been verified:
 
 - local CAP runtime
@@ -2241,6 +2269,8 @@ The following capabilities have been verified:
 - deployed NHBCustomer collection READ
 - deployed Corporate and Individual `CustomerType` equality filtering
 - deployed keyed Get Party retrieval
+- SAP accounting posting and reversal through Destination Service and Integration Suite to the controlled mock receiver
+- SAP document-identity persistence and correlation continuity into Integration Suite monitoring
 
 Both Account Details and Accountholder have now been verified locally and through the deployed Cloud Foundry application.
 
@@ -2275,7 +2305,7 @@ Likewise, Finxact provider structures do not define the NHB public service contr
 
 ### 12.3 Target architecture
 
-The target architecture extends the current CAP and Fiserv foundation with SAP enterprise capabilities:
+The target architecture builds on the current CAP, Fiserv, and verified SAP mediation baseline with live SAP S/4HANA execution and additional enterprise capabilities:
 
 ```text
                          NHB Applications
@@ -2307,9 +2337,13 @@ NHB CAP
 ↓
 NHB SAP accounting adapter
 ↓
-SAP synchronous Journal Entry service
+SAP Destination Service
 ↓
-SAP S/4HANA
+SAP Integration Suite mediation
+↓
+SAP synchronous Journal Entry contract
+↓
+Controlled mock receiver (verified) / live SAP S/4HANA (pending)
 
 The implementation does not use direct SAP S/4HANA database access.
 
@@ -2464,19 +2498,25 @@ Cloud Foundry deployment
 Accountholder
         │
         ▼
-Additional banking capabilities
+SAP accounting adapter
         │
         ▼
-SAP S/4HANA integration
+Destination Service / Integration Suite / mock receiver
+        │
+        ▼
+Live SAP S/4HANA verification (pending)
+        │
+        ▼
+Additional banking and enterprise capabilities
 ```
 
 A component moves from target architecture into current architecture only after its actual integration path has been implemented and demonstrated.
 
 ---
 
-## SAP Integration Suite Mediation Baseline
+### 12.6 SAP Integration Suite Mediation Baseline
 
-### Architecture objective
+#### 12.6.1 Architecture objective
 
 NHBCAP01 now uses SAP Integration Suite as the verified enterprise mediation layer between the CAP application and the SAP S/4HANA accounting interface.
 
@@ -2500,7 +2540,7 @@ The architecture therefore separates:
 - destination and authentication configuration
 - target-system execution
 
-### Runtime architecture
+#### 12.6.2 Runtime architecture
 
 The deployed path is:
 
@@ -2541,7 +2581,7 @@ The current receiver is:
 
 https://nhb-mock-s4.cfapps.us10-001.hana.ondemand.com/journal-entry
 
-### Responsibility boundaries
+#### 12.6.3 Responsibility boundaries
 
 NHBCAP01 remains responsible for the business and accounting semantics.
 
@@ -2582,7 +2622,7 @@ The SAP S/4HANA-compatible receiver owns:
 
 For the current prototype, the receiver is a controlled mock implementation.
 
-### Destination architecture
+#### 12.6.4 Destination architecture
 
 NHBCAP01 uses the SAP Cloud SDK destination-based transport already implemented in:
 
@@ -2612,7 +2652,7 @@ This avoids embedding Integration Suite client credentials directly in the CAP a
 
 The application knows the logical destination name rather than owning the OAuth token acquisition process.
 
-### Authentication separation
+#### 12.6.5 Authentication separation
 
 Two independent OAuth security contexts exist in the verified architecture.
 
@@ -2640,7 +2680,7 @@ The final deployed application path does not require NHBCAP01 to generate an Int
 
 SAP Destination Service performs the OAuth2 Client Credentials flow.
 
-### Accounting configuration
+#### 12.6.6 Accounting configuration
 
 The deployed CAP service uses environment-based SAP accounting configuration.
 
@@ -2679,7 +2719,7 @@ Reversal Reason:
 
 These values are prototype configuration and do not represent a production SAP chart-of-accounts or accounting design.
 
-### SAP-safe document reference
+#### 12.6.7 SAP-safe document reference
 
 Integration testing exposed an important boundary constraint.
 
@@ -2720,7 +2760,7 @@ This preserves the NHB-owned traceability model while satisfying the external SA
 
 The transformation is deterministic and isolated at the SAP anti-corruption boundary.
 
-### Posting verification
+#### 12.6.8 Posting verification
 
 A real persisted PAYMENT_RECEIVED accounting event was submitted through the deployed CAP action:
 
@@ -2760,7 +2800,7 @@ null
 
 This proves that the integration was initiated by the deployed NHBCAP01 application rather than by an independent manual HTTP test.
 
-### Reversal verification
+#### 12.6.9 Reversal verification
 
 The same architecture was verified for PAYMENT_REVERSED.
 
@@ -2807,7 +2847,7 @@ null
 
 This verifies both normal posting and reversal through the same deployed Integration Suite mediation architecture.
 
-### SAP regression baseline
+#### 12.6.10 SAP regression baseline
 
 The SAP accounting regression suite was executed after introducing the SAP-safe document reference.
 
@@ -2834,7 +2874,7 @@ Verified result:
 
 This regression result establishes the local implementation baseline before deployed end-to-end verification.
 
-### Integration Suite verification progression
+#### 12.6.11 Integration Suite verification progression
 
 The Integration Suite capability was verified incrementally.
 
@@ -2866,7 +2906,7 @@ using a real MurabahaAccountingEvent.
 
 Both PAYMENT_RECEIVED and PAYMENT_REVERSED were verified at the final application level.
 
-### Failure evidence and architectural learning
+#### 12.6.12 Failure evidence and architectural learning
 
 Several controlled failures were encountered during verification and were useful in validating architectural boundaries.
 
@@ -2896,7 +2936,7 @@ Restarting the Cloud Foundry application did not deploy the local source-code ch
 
 These cases confirm that authentication, business configuration, destination resolution, message contract validation, receiver availability, and deployment lifecycle are distinct operational concerns.
 
-### Current baseline status
+#### 12.6.13 Current baseline status
 
 The Integration Suite Phase 1 baseline is now verified.
 
@@ -2920,7 +2960,7 @@ Verified:
 - SAP-safe reference mapping implemented
 - SAP regression suite 44/44 PASS
 
-### Current limitation
+#### 12.6.14 Current limitation
 
 The current endpoint is a controlled mock SAP S/4HANA receiver.
 
@@ -2939,7 +2979,7 @@ The project has not yet proven execution against a live SAP S/4HANA Journal Entr
 
 Live SAP execution remains a future milestone.
 
-### Future evolution
+#### 12.6.15 Future evolution
 
 The current Phase 1 architecture intentionally preserves SAP-specific mapping and SOAP generation inside NHBCAP01 because that implementation was already tested and governed.
 
@@ -2972,9 +3012,9 @@ Additional future improvements may include:
 - production credential governance
 - API Management where external API governance justifies it
 - replacement of the mock receiver with live SAP S/4HANA
-- formal architecture-to-implementation evidence in AV-03
+- further architecture-to-implementation evidence beyond the completed AV-03 v1.0 baseline
 
-### Architecture significance
+#### 12.6.16 Architecture significance
 
 This baseline demonstrates that NHBCAP01 is no longer only a CAP application capable of generating SAP-compatible SOAP.
 
@@ -3000,6 +3040,15 @@ Banking domain
 → SAP accounting platform
 
 This establishes the current verified SAP Integration Suite baseline for NHBCAP01.
+
+---
+### 12.7 Architecture-to-Implementation Realization — completed
+
+`AV-03 — NHBCAP01 Architecture-to-Implementation Realization` is completed as v1.0.
+
+The view connects the logical architecture to verified NHBCAP01 implementation evidence while preserving the separation between enterprise concepts, application behavior, integration mediation, and concrete runtime technologies.
+
+The first deep-understanding pass through CAP internals is completed. The current portfolio packaging phase presents this baseline and its evidence consistently; it does not imply that pending live SAP verification or production maturity has been completed.
 
 ---
 ## 13. Key Architecture Decisions
@@ -3028,6 +3077,8 @@ The following decisions define the current NHBCAP01 architecture.
 | Destination Service is not a current Fiserv runtime dependency | Current Fiserv connectivity uses runtime configuration directly |
 | SAP S/4HANA accounting is an implemented NHBCAP01 integration boundary | Normal posting and reversal are implemented and regression-verified; live S/4HANA execution remains pending external verification |
 | SAP integration should use supported APIs/services | Avoids direct database coupling |
+| SAP Integration Suite mediates the SAP accounting path | Destination-based OAuth and deployed posting/reversal are verified against a controlled mock receiver; live S/4HANA remains pending |
+| AV-03 v1.0 records architecture-to-implementation realization | Connects logical architecture to verified implementation evidence for portfolio communication |
 
 ---
 ## 14. Known Limitations and Open Architecture Items
@@ -3045,20 +3096,20 @@ Current limitations and open items include:
 - NHBCustomer query/filter behavior beyond the currently verified equality predicates joined by `and` has not yet been finalized.
 - `CustomerType = Corporate` cannot currently be translated directly to `PersonIndicator=false`.
 - Provider error mapping can be refined into more granular NHB error semantics.
-- Production resilience patterns such as retries, circuit breakers, timeout policy, and recovery behavior have not yet been fully designed.
-- Production observability and monitoring remain future work.
+- A shared outbound timeout baseline is implemented; production resilience patterns such as retries, circuit breakers, and uncertain-outcome recovery remain further design work.
+- The Integration Suite correlation and MPL monitoring baseline is verified; broader production observability and monitoring remain future work.
 - Production-grade authorization design remains future work.
 - Runtime secret management can be strengthened as the deployment architecture matures.
 - Fiserv integration currently focuses on retrieval scenarios; broader transactional capabilities have not yet been introduced.
 - SAP S/4HANA accounting integration is implemented through the NHBCAP01 application boundary and verified through controlled regression; live SAP S/4HANA posting remains pending external verification.
-- SAP BTP Destination Service is not used by the current Fiserv runtime path; SAP accounting uses Destination-aware transport, while the live SAP Destination configuration remains pending laboratory verification.
+- SAP BTP Destination Service is not used by the current Fiserv runtime path. SAP accounting Destination configuration and mediation to the mock receiver are verified; live SAP S/4HANA connectivity remains pending.
 
 These items are recorded explicitly so that verified implementation, temporary integration mappings, and future architecture remain distinguishable.
 
 ---
 ## 15. Next Architecture Steps
 
-The next architecture work should continue incrementally from the verified baseline.
+Portfolio packaging and documentation polish are the current phase, following completion of AV-03 v1.0 and the first CAP internals deep-understanding pass. The completed increments and selective future architecture steps below provide reference context rather than a requirement to expand implementation during packaging.
 
 ### 15.1 Accountholder baseline — completed
 
@@ -3244,7 +3295,7 @@ The next steps are:
 1. Make the SAP S/4HANA laboratory environment available.
 2. Confirm that the synchronous Journal Entry service is active and accessible.
 3. Configure the required SAP communication arrangement.
-4. Configure and validate the SAP BTP Destination used by NHBCAP01.
+4. Adapt and validate the already verified Integration Suite destination and receiver configuration for the live SAP S/4HANA environment.
 5. Confirm the required authentication and endpoint settings.
 6. Provide approved test accounting configuration, including a valid SAP reversal-reason code.
 7. Execute a controlled `PAYMENT_RECEIVED` posting.
@@ -3493,7 +3544,9 @@ Technical correlation
         └── traces one runtime request across services and transports
 ```
 
-Future structured logging should include only the information required for diagnosis and traceability.
+The current SAP mediation path propagates the business `correlationId` as `X-Correlation-ID` through Destination transport into Integration Suite monitoring, where Groovy MPL enrichment exposes searchable `NHB_CorrelationId`. This verified business correlation baseline remains distinct from future technical request tracing.
+
+Further structured logging should include only the information required for diagnosis and traceability.
 
 Provider payloads, authentication material, access tokens, credentials, and unnecessary customer information must not be written to logs.
 
@@ -3521,13 +3574,13 @@ The SAP transport supports:
 - SAP BTP Destination-aware execution through the SAP Cloud SDK
 - controlled direct/basic HTTP execution
 
-Explicit timeout behavior has not yet been standardized across these paths.
+A shared outbound timeout baseline is implemented under `srv/integration/http.js` and used by the Fiserv clients and SAP transport.
 
-This is the first justified runtime resilience control to introduce.
+`NHB_HTTP_TIMEOUT_MS` selects a positive integer timeout in milliseconds, with a default of 10000 ms. Fetch-based calls use an abort boundary and classify expiry as `OutboundTimeoutError` with code `NHB_HTTP_TIMEOUT`; SAP Destination transport applies the same configured timeout through the SAP Cloud SDK.
 
 An outbound request must not be allowed to wait indefinitely for a remote system.
 
-The intended pattern is:
+The implemented timeout pattern is:
 
 ```text
 NHBCAP01 outbound call
@@ -3549,9 +3602,9 @@ Configured timeout boundary
         NHB error handling
 ```
 
-Timeout configuration should be externalized rather than hard-coded independently inside provider clients.
+Timeout configuration is externalized through the shared helper rather than hard-coded independently inside provider clients.
 
-A shared default may initially be used where justified.
+The current shared default is 10 seconds.
 
 Provider-specific timeout overrides should be introduced only when operational evidence shows that different integration paths require different policies.
 
@@ -3707,16 +3760,16 @@ They should be added only when runtime behavior demonstrates a concrete requirem
 
 #### 15.6.9 Implementation sequence
 
-The recommended implementation sequence is:
+The original implementation sequence provides a reference for further maturity. Explicit outbound timeout handling is now implemented, and SAP business correlation into Integration Suite monitoring is verified. Technical request tracing and broader production controls remain separate refinements:
 
 ```text
 Current verified baseline
         │
         ▼
-1. Explicit outbound timeout policy
+1. Explicit outbound timeout policy — implemented
         │
         ▼
-2. Controlled timeout error classification
+2. Fetch timeout error classification — implemented
         │
         ▼
 3. Technical request correlation
@@ -3740,7 +3793,7 @@ Current verified baseline
 9. Additional resilience controls where justified
 ```
 
-The first implementation increment should therefore be explicit outbound timeout handling.
+The initial outbound timeout increment is completed. Further cross-cutting work should build on this baseline when justified by runtime evidence, rather than treating timeout handling as unimplemented.
 
 Automatic retry is deliberately deferred until retry-safe operations and uncertain financial outcomes are formally addressed.
 
@@ -3749,11 +3802,11 @@ The governing cross-cutting principle is:
 > NHBCAP01 introduces security, resilience, observability, and governance controls according to demonstrated architectural risk while preserving explicit NHB business semantics and provider boundaries.
 
 ---
-## Summary
+## 16. Summary
 
 NHBCAP01 demonstrates an NHB-owned application and integration architecture built on SAP CAP.
 
-The architecture separates four primary concerns:
+The following view shows the NHB contract, CAP, persistence, and Fiserv concerns. The verified SAP accounting mediation path is described in section 12.6:
 
 ```text
 NHB Consumers
@@ -3775,7 +3828,7 @@ SQLite / HANA           Fiserv Banking Hub
                              Finxact
 ```
 
-The current verified external integration baseline consists of:
+The verified Fiserv and cloud runtime baseline consists of:
 
 - Fiserv OAuth 2.0 Client Credentials
 - Finxact Get Account Details
@@ -3805,7 +3858,9 @@ Provider Contract
 
 The principal open architecture concerns are the final NHB customer identifier strategy, NHBCustomer query semantics beyond the currently verified equality predicates joined by `and`, and the observed Party List record without `PartyId`.
 
-SAP S/4HANA accounting is now an implemented NHBCAP01 integration boundary using the supported synchronous Journal Entry service for normal posting and reversal. Live S/4HANA execution remains pending external verification, while additional SAP capabilities remain selective future integrations driven by defined NHB use cases.
+SAP accounting is an implemented NHBCAP01 integration boundary using the synchronous Journal Entry contracts for normal posting and reversal. The deployed path through Destination Service and SAP Integration Suite to the controlled mock receiver is verified, including document-identity persistence and correlation continuity. Live S/4HANA execution remains pending external verification, while additional SAP capabilities remain selective future integrations driven by defined NHB use cases.
+
+AV-03 v1.0 and the first CAP internals deep-understanding pass are completed. Portfolio packaging and documentation polish are now the current phase.
 
 The governing architecture principle remains:
 

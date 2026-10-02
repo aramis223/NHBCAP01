@@ -22,6 +22,16 @@ The goal is to understand:
 - how the repository represents those relationships
 - how the architecture connects to implementation
 
+## Current Project Baseline
+
+`AV-03 — NHBCAP01 Architecture-to-Implementation Realization` is completed as v1.0.
+
+The SAP Integration Suite mediation baseline is implemented and verified, and the first deep-understanding pass through CAP internals is completed.
+
+Portfolio packaging is now the current phase.
+
+This guide remains a learning and reference document. Earlier review observations are retained where useful, with resolved findings distinguished from remaining modeling refinements.
+
 ---
 
 # 1. Business Capability Model
@@ -475,11 +485,11 @@ followed by:
 
 `Originate Financing`
 
-The intended meaning and ordering of these processes should be verified against the detailed BPMN models.
+The intended meaning and ordering were reviewed and resolved as recorded under Resolved — Financing Lifecycle Semantics. Detailed BPMN models should remain consistent with that definition.
 
 This is important because the term `Originate Financing` can be interpreted differently depending on the banking context.
 
-The NHB repository should therefore use a clear and consistent definition of origination before the lifecycle is considered final.
+The NHB repository uses the narrower post-credit definition of origination recorded in that resolution.
 
 ## Key Principle
 
@@ -825,15 +835,15 @@ The package:
 
 `00 Architecture Governance`
 
-currently contains no substantive architecture-governance artifacts.
+previously contained no substantive architecture-governance artifacts. This observation is resolved by the Architecture Governance Baseline recorded below.
 
 ### Interpretation
 
-The package currently acts as a placeholder rather than an active governance layer.
+At the time of the initial review, the package acted as a placeholder rather than an active governance layer.
 
-### Potential Future Content
+### Governance Reference Content
 
-Possible governance artifacts may include:
+Governance artifacts may include:
 
 - architecture scope
 - repository structure guidance
@@ -849,7 +859,7 @@ The governance layer should remain lightweight, practical, and useful rather tha
 
 ### Action
 
-Review the governance package during repository finalization and introduce only the artifacts required to make the repository understandable, consistent, and maintainable.
+Maintain the established lightweight governance baseline and introduce further artifacts only where required to keep the repository understandable, consistent, and maintainable.
 
 ---
 
@@ -1121,44 +1131,25 @@ This establishes a concise architecture-view baseline for v1.0.
 
 ---
 
+### Resolved — Architecture-to-Implementation Realization View
+
+`AV-03 — NHBCAP01 Architecture-to-Implementation Realization`
+
+is completed as v1.0.
+
+The earlier deferral has been superseded by the completed realization view, which connects enterprise and application architecture to verified NHBCAP01 implementation evidence.
+
+The SAP Integration Suite mediation baseline is implemented and verified. The first deep-understanding pass through CAP internals is also completed.
+
+The current phase is portfolio packaging: presenting the completed baseline and its evidence clearly while preserving the separation between logical architecture and implementation.
+
+---
+
 ## Deferred Findings
 
 The following items were reviewed and intentionally deferred from the NHB Enterprise Architecture Baseline v1.0.
 
-They do not prevent the repository from being baselined because they represent future architecture maturity, implementation realization, or optional presentation improvements rather than unresolved baseline defects.
-
-### Deferred — Architecture-to-Implementation Realization View
-
-A potential:
-
-`AV-03 — NHBCAP01 Architecture-to-Implementation Realization`
-
-view was considered during the v1.0 review.
-
-The current repository does not yet contain a sufficiently mature implementation-evidence model under:
-
-`06 Traceability & Matrices`
-
-to support such a view without introducing new implementation elements solely for presentation purposes.
-
-The view is therefore intentionally deferred.
-
-It should be introduced during the NHBCAP01 implementation-realization phase, after verified implementation evidence has been reviewed and modeled.
-
-Candidate implementation evidence may later include:
-
-- CAP services and CDS models
-- application logic
-- integration adapters
-- regression tests
-- SAP BTP / Cloud Foundry deployment
-- XSUAA
-- Destination Service
-- HANA / HDI
-- SAP S/4HANA integration
-- external provider integration
-
-The deferred view will then provide explicit traceability from enterprise architecture through application architecture to verified implementation evidence.
+They do not prevent the repository from being baselined because they represent further architecture maturity or optional presentation improvements rather than unresolved baseline defects.
 
 ---
 
@@ -1205,7 +1196,7 @@ Detailed modeling of:
 
 will be introduced only when supported by concrete implementation requirements.
 
-The NHBCAP01 integration phase, including SAP and external-provider integration, is expected to provide this evidence.
+NHBCAP01 now provides SAP and external-provider integration evidence, including the implemented and verified SAP Integration Suite mediation baseline. Further EA modeling should use that evidence selectively where it improves architectural understanding.
 
 ---
 
@@ -1215,27 +1206,21 @@ The NHBCAP01 integration phase, including SAP and external-provider integration,
 
 This is intentional for the v1.0 logical architecture.
 
-Physical security realization will be addressed during implementation mapping, where services such as identity, authorization, credential management, and platform security can be mapped to actual technology.
+NHBCAP01 already provides security implementation evidence, including XSUAA, OAuth 2.0, and JWT-based access control. Further modeling of the cross-cutting service should use that evidence without implying that AV-03 remains deferred.
 
 ---
 
-### Deferred — Logical-to-Physical Technology Mapping
+### Deferred — Further Logical-to-Physical Technology Mapping
 
-The Technology Architecture currently represents the logical target architecture.
+The Technology Architecture continues to represent the logical target architecture.
 
-Detailed mapping to physical technologies and deployed services is intentionally deferred to the implementation-realization phase.
+AV-03 v1.0 now provides the NHBCAP01 architecture-to-implementation realization view.
 
-Candidate future mappings may include:
+Further mapping beyond that completed baseline remains selective and should be supported by verified deployment and integration evidence.
 
-- SAP BTP
-- Cloud Foundry
-- SAP CAP / Node.js
-- SAP HANA / HDI
-- XSUAA
-- Destination Service
-- SAP Integration Suite
-- SAP S/4HANA
-- selected AWS services
+Candidate extensions should not be treated as implemented merely because a technology is listed or considered.
+
+The logical architecture should remain distinct from concrete products and deployed services.
 
 ---
 
@@ -1247,41 +1232,7 @@ The underlying repository relationships are considered sufficient for the v1.0 b
 
 Additional diagrams should be created only where they provide meaningful architecture communication value rather than for structural symmetry.
 
-
 ---
-
-### Deferred — Architecture-to-Implementation Realization View
-
-A potential:
-
-`AV-03 — NHBCAP01 Architecture-to-Implementation Realization`
-
-view was considered during the v1.0 review.
-
-The current repository does not yet contain a sufficiently mature implementation-evidence model under:
-
-`06 Traceability & Matrices`
-
-to support such a view without introducing new implementation elements solely for presentation purposes.
-
-The view is therefore intentionally deferred.
-
-It should be introduced during the NHBCAP01 implementation-realization phase, after verified implementation evidence has been reviewed and modeled.
-
-Candidate implementation evidence may later include:
-
-- CAP services and CDS models
-- application logic
-- integration adapters
-- regression tests
-- SAP BTP / Cloud Foundry deployment
-- XSUAA
-- Destination Service
-- HANA / HDI
-- SAP S/4HANA integration
-- external provider integration
-
-The deferred view will then provide explicit traceability from enterprise architecture through application architecture to verified implementation evidence.
 
 # 13. Core Concepts to Remember
 
@@ -1474,7 +1425,7 @@ The purpose of the architecture repository is therefore to preserve these relati
 
 This document should remain a living learning and architecture-understanding guide.
 
-As the review continues, additional sections should be added for:
+The guide already covers the principal architecture layers. As understanding evolves, the existing sections should be maintained and selectively extended for:
 
 - Application Architecture
 - Data & Information Architecture
@@ -1939,7 +1890,7 @@ Integration
         ↓
 Technology
 
-This pattern provides traceability from business need to application support and eventually to implementation.
+This pattern provides traceability from business need to application support and implementation, with AV-03 v1.0 presenting the NHBCAP01 realization baseline.
 
 ---
 
@@ -2038,9 +1989,7 @@ currently contains application components such as:
 
 These elements appear semantically closer to Deposit Management than Payment Management.
 
-The domain name and component catalog should therefore be reviewed for consistency.
-
-No changes should be made until the intended business-domain baseline is confirmed.
+The cross-layer baseline has been confirmed as Deposit Management, as recorded under Resolved — CD-03 Domain Baseline Consistency. This finding is resolved.
 
 ---
 
@@ -2643,14 +2592,7 @@ The Payment Information Structure currently contains only:
 
 `Payment Instruction`
 
-This reinforces the existing repository review question about whether the third domain is intended to represent:
-
-- Payment Management
-- Deposit Management
-- a combined Payment and Deposit domain
-- or a partially migrated architecture baseline
-
-This should be resolved consistently across Business, Application, and Data & Information Architecture.
+The third domain is confirmed as Deposit Management across CD-03 / AC-03 / AS-03. Genuine payment concepts such as Payment Instruction remain separate, as recorded under Resolved — CD-03 Domain Baseline Consistency.
 
 ---
 
@@ -2658,24 +2600,9 @@ This should be resolved consistently across Business, Application, and Data & In
 
 ### R-09 — Payment and Deposit Information-Domain Consistency
 
-The current repository contains both:
+This finding is resolved by the confirmed Deposit Management baseline across CD-03 / AC-03 / AS-03.
 
-`Deposit Management`
-
-domain naming and a substantial:
-
-`Deposit Management Information Structure`
-
-The semantic relationship between these two areas should be clarified.
-
-The review should confirm whether:
-
-- Deposit Management remains a separate business concern
-- Deposit concepts should be moved under another domain
-- Payment Management should be renamed
-- or the current structure intentionally contains both concerns
-
-No changes should be made until the cross-layer domain model is reviewed.
+The Deposit Management Information Structure is consistent with that domain. Genuine payment concepts such as `Payment Instruction` remain separate.
 
 ---
 
@@ -3128,7 +3055,7 @@ It does not yet describe in detail:
 - error-handling mechanisms
 - physical network paths
 
-Those belong to later integration-design and implementation refinement where they are architecturally relevant.
+Those details belong to technical integration design and implementation documentation. NHBCAP01 already provides this evidence, including the implemented and verified SAP Integration Suite mediation baseline; the logical EA view need not reproduce it in full.
 
 ---
 
@@ -3140,6 +3067,7 @@ Examples include:
 
 - SAP CAP OData services
 - Fiserv Banking Hub APIs
+- SAP Integration Suite mediation baseline — implemented and verified
 - OAuth 2.0 Client Credentials
 - XSUAA
 - SAP BTP Destination service
@@ -3238,7 +3166,7 @@ This is acceptable for the current baseline.
 
 These packages should be populated only when reusable integration behavior or reusable architectural patterns are clearly required.
 
-Potential candidates may emerge from NHBCAP01 implementation experience.
+NHBCAP01 implementation evidence, including verified SAP Integration Suite mediation, now provides candidates for selective modeling. This does not require every logical integration package to be populated.
 
 ---
 
@@ -3254,41 +3182,11 @@ A dedicated catalogue should only be added if it improves navigation, governance
 
 ### R-16 — CD-03 Cross-Layer Domain Baseline Consistency
 
-Deposit-related terminology appears across multiple architecture layers, including:
+This finding is resolved as recorded under Resolved — CD-03 Domain Baseline Consistency.
 
-- Application Architecture
-- Data & Information Architecture
-- Integration Architecture
+Deposit Management is the confirmed CD-03 / AC-03 / AS-03 and Level-1 capability-domain baseline.
 
-Examples include:
-
-- Deposit Account Management
-- Deposit Management Information Structure
-- Establish Deposit Account
-- Customer Information Exchange for Deposit Account Establishment
-- Product Offering Exchange for Deposit Account Establishment
-
-At the same time, the current Level-1 domain is named:
-
-`Payment Management`
-
-This is therefore a cross-layer baseline consistency issue rather than a local naming issue.
-
-The repository should ultimately determine whether the intended domain is:
-
-- Payment Management
-- Deposit Management
-- a combined Payment and Deposit domain
-- or another explicitly defined domain structure
-
-The decision should be applied consistently across:
-
-- Business Architecture
-- Application Architecture
-- Data & Information Architecture
-- Integration Architecture
-
-No changes should be made until the intended domain baseline is confirmed.
+Deposit-related application, information, and integration terminology remains consistent with that decision. Genuine payment concepts remain separate.
 
 ---
 
@@ -3414,7 +3312,7 @@ It does not automatically mean:
 - a particular operating system
 - a particular cloud provider
 
-Those technologies may later realize or implement the logical platform.
+Concrete technologies realize or implement the logical platform; AV-03 v1.0 provides the NHBCAP01 realization view while preserving this distinction.
 
 System Software therefore answers:
 
@@ -3580,7 +3478,7 @@ This creates a simple logical separation between:
 
 The purpose of this view is not to describe physical infrastructure.
 
-It provides the logical technology foundation for later implementation mapping.
+It provides the logical technology foundation for implementation mapping, including the completed AV-03 v1.0 realization view.
 
 ---
 
@@ -3671,7 +3569,7 @@ The logical architecture should remain stable even if the implementation technol
 
 ## Relationship to NHBCAP01
 
-NHBCAP01 provides concrete implementation evidence that can eventually be mapped to the logical Technology Architecture.
+NHBCAP01 provides concrete implementation evidence connected to the logical architecture through the completed AV-03 v1.0 realization view.
 
 Examples include:
 
@@ -3722,6 +3620,7 @@ Logical:
 Implementation evidence currently includes:
 
 - CAP integration modules
+- SAP Integration Suite mediation baseline — implemented and verified
 - SAP BTP Destination service
 - outbound HTTPS integration
 - Fiserv Banking Hub connectivity
@@ -3866,7 +3765,7 @@ NHBCAP01 now provides concrete implementation technologies including:
 - XSUAA
 - Destination service
 
-Future repository refinement should determine how much implementation detail should be mapped into the EA repository.
+AV-03 v1.0 establishes the NHBCAP01 architecture-to-implementation realization baseline. Further repository refinement should determine how much additional implementation detail adds architectural value.
 
 The logical architecture should not be replaced by vendor-specific elements.
 
@@ -4156,12 +4055,11 @@ The model may contain thousands of elements and relationships.
 
 A view selects only the information required to answer a particular question.
 
-Examples of future NHB Architecture Views might include:
+The current architecture-view baseline includes AV-01 — NHB Enterprise Architecture Overview, AV-02 — Sharia-Compliant Financing End-to-End View, and AV-03 — NHBCAP01 Architecture-to-Implementation Realization, completed as v1.0.
 
-- executive architecture overview
-- Sharia-compliant financing end-to-end view
+Examples of additional NHB Architecture Views might include:
+
 - customer onboarding cross-layer view
-- NHBCAP01 implementation realization view
 - Fiserv integration view
 - SAP integration view
 - security and trust-boundary view
@@ -4176,15 +4074,13 @@ The package:
 
 `07 Architecture Views`
 
-is currently empty.
-
-This is acceptable at the current baseline.
+contains the established AV-01 and AV-02 views and the completed AV-03 v1.0 realization view.
 
 The repository already contains many useful views inside the individual architecture layers.
 
 The purpose of `07 Architecture Views` should therefore not be to duplicate those existing diagrams.
 
-It can later become the home for carefully selected:
+It provides the home for carefully selected:
 
 - cross-layer views
 - executive views
@@ -4287,7 +4183,7 @@ This allows the repository to demonstrate not only intended architecture but als
 
 ## Relationship to NHBCAP01
 
-NHBCAP01 provides a strong opportunity to create one or more high-value end-to-end traceability views.
+NHBCAP01 now has a completed architecture-to-implementation realization view in AV-03 v1.0. Further end-to-end traceability views should be added only where they answer a distinct stakeholder question.
 
 For example:
 
@@ -4309,13 +4205,13 @@ SAP BTP / Cloud Foundry
         ↓
 Verified Implementation
 
-A similar traceability chain can eventually be created for:
+A focused traceability chain may also be used to explain:
 
 `Obtain Sharia-Compliant Financing`
 
 and the Murabaha implementation.
 
-These future views would be valuable because they connect:
+Such focused explanations build on the completed baseline by connecting:
 
 - enterprise architecture
 - solution architecture
@@ -4336,7 +4232,7 @@ and:
 
 `TR-01 — CD-01 Component-Service Realization`
 
-This represents an early traceability baseline rather than comprehensive repository coverage.
+This describes the component-service traceability baseline rather than comprehensive repository coverage. The completed AV-03 v1.0 view also connects architecture to NHBCAP01 implementation evidence.
 
 That is acceptable.
 
@@ -4369,7 +4265,7 @@ No change is required until the intended purpose of TR-01 is confirmed.
 
 ### R-21 — Traceability Coverage Strategy
 
-The Traceability & Matrices area currently covers only one relationship category:
+The component-service traceability category described here is:
 
 Application Component
     →
@@ -4389,9 +4285,9 @@ Instead, a traceability strategy should identify which relationships are most va
 
 ### R-22 — Architecture Views Purpose
 
-The `07 Architecture Views` package is currently empty.
+The `07 Architecture Views` package contains AV-01, AV-02, and the completed AV-03 v1.0 realization view.
 
-Future use should focus on high-value cross-layer or stakeholder-oriented views.
+Further use should focus on high-value cross-layer or stakeholder-oriented views that add to this baseline.
 
 The package should not become a duplicate storage location for diagrams already contained in other architecture layers.
 
@@ -4468,7 +4364,7 @@ Traceability runs through the entire chain.
 
 ### R-23 — Business Process to Application Service Serving Direction
 
-Multiple verified relationships currently use:
+The initial review identified multiple relationships using:
 
 Business Process
     → Serving →
@@ -4482,10 +4378,10 @@ Examples include:
 
 This reverses the intended ArchiMate Serving semantics.
 
-The corrected pattern should be:
+The corrected v1.0 pattern is:
 
 Application Service
     → Serving →
 Business Process
 
-This issue should be corrected consistently across the repository before the final baseline is frozen.
+This issue has been corrected consistently across the affected mappings, as recorded under Resolved — Business Process to Application Service Serving Direction. The examples above describe the earlier issue.

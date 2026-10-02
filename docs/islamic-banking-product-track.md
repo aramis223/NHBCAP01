@@ -326,7 +326,7 @@ The application-side SAP accounting path is verified through isolated SAP-layer 
 
 Current verified regression baseline:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -390,7 +390,9 @@ The newer SAP accounting-posting implementation adds the following application-s
 - `PENDING → FAILED` processing
 - persistence of `errorMessage`
 
-These newer posting capabilities are currently verified through isolated automated tests and CAP-level regression using controlled SAP responses.
+These posting capabilities are verified through isolated automated tests, CAP-level regression using controlled SAP responses, and deployed end-to-end mediation through SAP Integration Suite to a controlled mock S/4HANA receiver. Normal posting, reversal, correlation propagation, and SAP-native document-identity persistence are verified within that mock-mediated boundary.
+
+The full business correlation identifier is retained for traceability and propagated as `X-Correlation-ID`; the SAP-safe 16-character `DocumentReferenceID` is derived separately from the accounting-event UUID.
 
 They have not yet been claimed as live SAP S/4HANA posting evidence.
 
@@ -420,6 +422,9 @@ SAP BTP Cloud Foundry
                 │       VERIFIED
                 │
                 ├── SAP response processing
+                │       VERIFIED
+                │
+                ├── Integration Suite mediation to mock receiver
                 │       VERIFIED
                 │
                 └── Live S/4HANA posting
@@ -491,7 +496,7 @@ The prototype follows these architecture principles:
 - SAP CAP owns the NHB-facing application and service boundary.
 - CAP does not access Finxact or SAP databases directly.
 - Finxact capabilities are consumed through supported APIs and controlled credentials.
-- SAP S/4HANA integration will use supported SAP APIs or services rather than direct database access.
+- SAP S/4HANA integration uses supported SAP API/service contracts rather than direct database access.
 - Provider-specific contracts remain behind the NHB CAP boundary.
 - NHB-owned domain behavior is not automatically delegated to Finxact.
 - Credentials and secrets remain outside Git and project documentation.
@@ -764,7 +769,7 @@ CAP-level regression verifies:
 
 Current verified regression baseline:
 
-- SAP accounting/integration suite: **43 passed, 0 failed**
+- SAP accounting/integration suite: **44 passed, 0 failed**
 - Murabaha servicing regression: **15 passed, 0 failed**
 - Murabaha accounting boundary regression: **4 passed, 0 failed**
 
@@ -808,6 +813,9 @@ SAP response processing
 CAP POSTED / FAILED lifecycle
         VERIFIED
             │
+Integration Suite mediation to controlled mock receiver
+        VERIFIED
+            │
 Live SAP S/4HANA normal posting
         PENDING EXTERNAL VERIFICATION
             │
@@ -821,10 +829,14 @@ The prototype therefore demonstrates the application and integration architectur
 
 The next milestones should continue from the verified baseline rather than broaden the prototype prematurely.
 
-The immediate priorities are:
+The current phase is portfolio packaging and documentation polish. AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0, and the first CAP internals deep-understanding pass is completed.
+
+Package the verified architecture, process, implementation, and test evidence into a consistent portfolio narrative. The SAP Integration Suite mediation baseline and its Destination configuration are already implemented and verified against the controlled mock receiver.
+
+The remaining live SAP verification milestones are:
 
 1. Configure the SAP S/4HANA Journal Entry service in the laboratory environment.
-2. Create and validate the required SAP BTP Destination.
+2. Validate the SAP BTP Destination against the live SAP endpoint, building on the verified mock-mediated Destination baseline.
 3. Confirm the supported authentication and communication arrangement.
 4. Provide approved test accounting configuration, including a valid SAP reversal-reason code.
 5. Execute the first live `PAYMENT_RECEIVED` posting.
@@ -931,13 +943,14 @@ The following capabilities should be introduced only when demonstrated requireme
 - production authorization design
 - high-availability and disaster-recovery controls
 
-The next architectural objective is therefore not to maximize the number of integrations.
-
-It is to convert the current verified application-side SAP accounting boundary into a genuine, repeatable live SAP S/4HANA posting baseline while preserving the clean separation between NHB domain logic, SAP integration logic, and external platform configuration.
+The current objective is to package the verified architecture and implementation evidence for the portfolio. Live SAP S/4HANA posting remains a separate external verification milestone, preserving the clean separation between NHB domain logic, SAP integration logic, and external platform configuration.
 
 ## End-to-End Architecture and Implementation Traceability
 This prototype provides one traceable chain from enterprise architecture through business-process modeling to an executable and tested SAP CAP service.
 ### Authoritative Artifacts
+
+AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0 and provides the architecture-to-implementation realization view for this traceability baseline.
+
 - Sparx EA: NHB Enterprise Architecture - P1.5 End-to-End Traceability.qea — enterprise capabilities, value streams, business processes, applications, controls, and implementation links.
 - SAP Signavio: 04 – VS-04.01 Murabaha Financing — End-to-End BPMN — BPMN model 13978c1734a944e1adf93e1c6c86639b.
 - SAP CAP: NHBCAP01 — domain entities, OData services, lifecycle controls, payment and reversal operations, validation logic, and synthetic evidence data.
@@ -957,7 +970,7 @@ This prototype provides one traceable chain from enterprise architecture through
 | Prevent duplicate reversal | Duplicate reversal exception path | Operational resilience and financial-integrity control | Payment reversal-state validation and unique external reversal reference | A second reversal of the same payment and reuse of an external reversal reference are rejected with HTTP 409. |
 | Continue servicing while defaulted | Delinquency / recovery servicing path | Collections, recovery, and financing-servicing capability | `markFinancingDefaulted`; payment-processing logic | Financing transitions to `DEFAULTED` while valid installment payments remain accepted. |
 | Protect settled financing | Post-settlement adjustment control | Settlement finality and governed adjustment capability | `reverseMurabahaPayment` settlement-state validation | Ordinary reversal after `SETTLED` is rejected with HTTP 409; a separate adjustment workflow is required. |
-| Complete financing | All installments paid / settlement end state | Product lifecycle closure and future accounting handoff | Automatic installment `PAID` and financing `SETTLED` transitions | Settlement occurs only when every installment is fully paid. |
+| Complete financing | All installments paid / settlement end state | Product lifecycle closure and the implemented accounting-event handoff | Automatic installment `PAID` and financing `SETTLED` transitions | Settlement occurs only when every installment is fully paid. |
 
 ## Evidence IDs and Demonstration Data
 
@@ -986,7 +999,27 @@ Murabaha Domain Logic
 NHB Persistence
 ```
 
-The target external integration path is:
+The implemented SAP accounting mediation path is:
+
+```text
+MurabahaAccountingEvent
+          │
+          ▼
+postAccountingEvent
+          │
+          ▼
+SAP BTP Destination
+          │
+          ▼
+SAP Integration Suite
+          │
+          ▼
+Controlled mock S/4HANA receiver
+```
+
+This path is verified for normal posting and reversal. Live SAP S/4HANA execution remains pending external verification.
+
+The target external platform architecture is:
 
 ```text
                     SAP CAP
@@ -1014,7 +1047,7 @@ The artifacts are deliberately separated by purpose.
 
 **Fiserv / Finxact** provides external banking-platform capabilities through controlled API integration without defining NHB-owned service or domain contracts.
 
-**SAP S/4HANA** remains the target enterprise accounting and cash-management platform and will be introduced through supported SAP services after a concrete Murabaha accounting use case is selected.
+**SAP S/4HANA** remains the target enterprise accounting and cash-management platform. Murabaha payment posting and reversal have implemented SAP service contracts and a verified Integration Suite mediation baseline against a controlled mock receiver. Live SAP accounting execution remains pending external verification; cash-management integration remains target scope.
 
 The value is not duplication between tools. The value is a governed chain demonstrating:
 

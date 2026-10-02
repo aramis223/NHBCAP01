@@ -33,7 +33,7 @@ NHB CAP does not expose the Finxact provider model directly. CAP consumes the ex
 
 ## 2. Scope
 
-The implemented integration currently covers:
+The initial Account Details integration covers the following. The subsequently implemented Accountholder integration is documented in section 13:
 
 - Fiserv Banking Hub certification environment
 - Finxact account-processing APIs
@@ -166,7 +166,7 @@ This established the external API behavior before CAP implementation.
 
 ## 6. CAP Fiserv Client
 
-The CAP implementation separates authentication and account access into dedicated modules:
+The initial Account Details implementation separates authentication and account access into dedicated modules. The current Accountholder extension additionally uses `srv/fiserv/parties.js`:
 
 ```text
 srv/
@@ -676,7 +676,7 @@ These relationship services establish supported Finxact navigation between parti
 
 With collection retrieval, keyed Get Party retrieval, and `CustomerType` equality filtering now verified locally and in SAP BTP Cloud Foundry, the Accountholder integration is considered a deployed extension of the established Account Details baseline.
 
-The remaining Accountholder concerns are customer identifier strategy, broader NHBCustomer query semantics, and investigation of the observed Party List record without `PartyId`.
+The remaining Accountholder concerns are the permanent customer identifier strategy, query semantics beyond the supported equality and pagination baseline described below, and investigation of the observed Party List record without `PartyId`.
 
 Broader `NHBCustomer` query semantics were extended and regression-tested.
 
@@ -694,7 +694,6 @@ Name eq '<value>' and CustomerType eq '<value>'
 
 `CustomerType` remains an NHB-side normalized filter and is not translated directly to Finxact `PersonIndicator`, because certification testing previously confirmed that `PersonIndicator=false` is not equivalent to organization-only semantics.
 
-```markdown
 Compound equality predicates joined by `and` are evaluated across the supported NHB fields. Regression testing confirmed both positive and contradictory cases:
 
 ```text

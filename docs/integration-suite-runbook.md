@@ -22,7 +22,11 @@ The current implementation has been verified for both:
 - PAYMENT_RECEIVED
 - PAYMENT_REVERSED
 
-The current receiver is a controlled mock S/4HANA endpoint deployed to Cloud Foundry. A live SAP S/4HANA Journal Entry service remains a future step.
+The current receiver is a controlled mock S/4HANA endpoint deployed to Cloud Foundry. A live SAP S/4HANA Journal Entry service remains pending external verification.
+
+The mediation and correlation-observability baseline is implemented and verified. AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0, and portfolio packaging and documentation polish are now the current phase.
+
+The commands below reproduce the verified prototype workflow; they are not evidence of live SAP accounting execution.
 
 ---
 
@@ -169,36 +173,50 @@ The token audience does not match the Integration Suite runtime client.
 
 Load the runtime client ID:
 
+```bash
 export IS_CLIENT_ID='PASTE_INTEGRATION_SUITE_CLIENT_ID_HERE'
+```
 
 Load the client secret without displaying it:
 
+```bash
 read -s -p "Integration Suite client secret: " IS_CLIENT_SECRET
 export IS_CLIENT_SECRET
 echo
+```
 
 Set the token URL:
 
+```bash
 export IS_TOKEN_URL='https://a79b9755trial.authentication.us10.hana.ondemand.com/oauth/token'
+```
 
 Verify only safe values:
 
+```bash
 echo "IS_CLIENT_ID length: ${#IS_CLIENT_ID}"
 echo "IS_CLIENT_SECRET length: ${#IS_CLIENT_SECRET}"
 echo "IS_TOKEN_URL: $IS_TOKEN_URL"
+```
 
 Generate a token:
 
+```bash
 TOKEN_RESPONSE=$(curl -sS \
   -u "$IS_CLIENT_ID:$IS_CLIENT_SECRET" \
   -d 'grant_type=client_credentials' \
   "$IS_TOKEN_URL")
+```
 
+```bash
 export IS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+```
 
+```bash
 echo "IS_TOKEN length: ${#IS_TOKEN}"
+```
 
-A successful Integration Suite token was approximately 1995 characters in the verified test.
+The Integration Suite token was approximately 1995 characters in the recorded test. Token length is historical diagnostic evidence, not a validity check; confirm that token acquisition succeeds and that the response contains an access token.
 
 ---
 
@@ -224,30 +242,42 @@ Do not paste or commit the secret.
 
 Load the client ID:
 
+```bash
 export XSUAA_CLIENT_ID='sb-nhb-cap01!t711977'
+```
 
 Load the secret safely:
 
+```bash
 read -s -p "XSUAA client secret: " XSUAA_CLIENT_SECRET
 export XSUAA_CLIENT_SECRET
 echo
+```
 
 Set the token URL:
 
+```bash
 export XSUAA_TOKEN_URL='https://a79b9755trial.authentication.us10.hana.ondemand.com/oauth/token'
+```
 
 Generate the token:
 
+```bash
 XSUAA_RESPONSE=$(curl -sS \
   -u "$XSUAA_CLIENT_ID:$XSUAA_CLIENT_SECRET" \
   -d 'grant_type=client_credentials' \
   "$XSUAA_TOKEN_URL")
+```
 
+```bash
 export XSUAA_TOKEN=$(echo "$XSUAA_RESPONSE" | jq -r '.access_token')
+```
 
+```bash
 echo "XSUAA_TOKEN length: ${#XSUAA_TOKEN}"
+```
 
-A successful NHBCAP01 XSUAA token was approximately 1375 characters in the verified test.
+The NHBCAP01 XSUAA token was approximately 1375 characters in the recorded test. Token length does not establish token validity or the correct audience.
 
 ---
 
@@ -326,11 +356,13 @@ Requested route 'nhb-mock-s4.cfapps.us10-001.hana.ondemand.com' does not exist
 
 Before testing Integration Suite, verify the mock receiver directly:
 
+```bash
 curl -i \
   -X POST \
   -H "Content-Type: text/xml; charset=utf-8" \
   --data '<Envelope>test</Envelope>' \
   "https://nhb-mock-s4.cfapps.us10-001.hana.ondemand.com/journal-entry"
+```
 
 Expected result:
 
@@ -430,22 +462,18 @@ Using the HTTP receiver removes unnecessary SOAP/CXF interpretation while preser
 
 A request without authentication can be used to verify that the endpoint exists:
 
+```bash
 curl -i \
   "https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry"
+```
 
 Expected result:
 
 401 Unauthorized
 
-This is a positive infrastructure signal.
+This is a positive authentication-boundary signal at the requested route. It does not by itself prove successful iFlow execution or receiver connectivity.
 
-It proves:
-
-- the endpoint exists
-- the route is registered
-- authentication is required
-
-A 404 would indicate that the sender endpoint is not registered correctly.
+Use the authenticated POST smoke test in section 11 to verify mediation to the mock receiver. A 404 warrants checking the sender address, deployed iFlow, and runtime route.
 
 ---
 
@@ -455,6 +483,7 @@ Generate a fresh Integration Suite token first.
 
 Then send:
 
+```bash
 curl -i \
   -X POST \
   -H "Authorization: Bearer $IS_TOKEN" \
@@ -467,6 +496,7 @@ curl -i \
   </soapenv:Body>
 </soapenv:Envelope>' \
   "https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry"
+```
 
 Verified successful result:
 
@@ -505,6 +535,7 @@ BAS
 
 Generate a SOAP message using the real project implementation:
 
+```bash
 node - <<'NODE'
 const { buildJournalEntrySoapRequest } =
   require('./srv/sap/journal-entry-soap');
@@ -538,6 +569,7 @@ require('fs').writeFileSync(
 
 console.log('Created /tmp/nhb-journal-entry.xml');
 NODE
+```
 
 Verify:
 
@@ -549,12 +581,14 @@ The verified generated request was approximately:
 
 Send it through Integration Suite:
 
+```bash
 curl -i \
   -X POST \
   -H "Authorization: Bearer $IS_TOKEN" \
   -H "Content-Type: text/xml; charset=utf-8" \
   --data-binary @/tmp/nhb-journal-entry.xml \
   "https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry"
+```
 
 Verified result:
 
@@ -678,7 +712,7 @@ srv/sap/transport.js
 
 uses:
 
-@​sap-cloud-sdk/http-client
+@sap-cloud-sdk/http-client
 
 executeHttpRequest
 
@@ -728,7 +762,7 @@ SAP_ACCOUNTING_CREDIT_ACCOUNT
 
 SAP_ACCOUNTING_REVERSAL_REASON
 
-Verified test values:
+Verified prototype test values (not a production accounting design):
 
 SAP_ACCOUNTING_COMPANY_CODE=1000
 
@@ -823,12 +857,14 @@ sap-transport.test.js
 
 Run:
 
+```bash
 node --test \
   sap-journal-entry-soap.test.js \
   sap-journal-entry-response.test.js \
   sap-journal-entry-reversal-soap.test.js \
   sap-transport.test.js \
   sap-accounting.test.js
+```
 
 Verified result after introducing the SAP-safe document reference:
 
@@ -894,10 +930,12 @@ Then verify the HANA Cloud database runtime state in BTP Cockpit.
 
 A simple database-backed test is:
 
+```bash
 curl -sS \
   -H "Authorization: Bearer $XSUAA_TOKEN" \
   "$APP_URL/service/NHBCAP01Service/MurabahaFinancing?\$top=1" \
   | jq
+```
 
 HTTP 200 proves the database path is available again.
 
@@ -911,10 +949,12 @@ export APP_URL='https://a79b9755trial-dev-nhbcap01-srv.cfapps.us10-001.hana.onde
 
 Query pending events:
 
+```bash
 curl -sS \
   -H "Authorization: Bearer $XSUAA_TOKEN" \
   "$APP_URL/service/NHBCAP01Service/MurabahaAccountingEvent?\$filter=postingStatus%20eq%20'PENDING'&\$top=5" \
   | jq
+```
 
 For payment posting tests, prefer:
 
@@ -932,12 +972,14 @@ ACCOUNTING_EVENT_ID='PASTE_PENDING_EVENT_ID_HERE'
 
 Invoke the unbound action:
 
+```bash
 curl -sS -X POST \
   -H "Authorization: Bearer $XSUAA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"accountingEventId\":\"$ACCOUNTING_EVENT_ID\"}" \
   "$APP_URL/service/NHBCAP01Service/postAccountingEvent" \
   | jq
+```
 
 Verified successful PAYMENT_RECEIVED result:
 
@@ -1050,19 +1092,21 @@ errorMessage:
 
 null
 
-This proves that both normal posting and reversal are functioning through the same Integration Suite mediation architecture.
+This verifies normal posting and reversal orchestration through the deployed Integration Suite mediation path to the controlled mock receiver. The mock returns deterministic SAP-style document identity; the repeated document number does not prove that distinct documents were created in a live SAP ledger.
 
 ---
 
 ## 26. Error Persistence Behavior
 
-If SAP posting fails inside postAccountingEvent, the handler updates the accounting event:
+If an accounting posting attempt begins and fails during SOAP construction, transport, confirmation parsing, or SAP response validation, the handler persists normalized failure evidence on the accounting event:
 
 postingStatus = FAILED
 
-errorMessage = error text
+errorMessage = bounded failure information
 
 The handler then returns the updated accounting event.
+
+Pre-attempt validation failures, such as missing accounting configuration, leave the event PENDING. They must not be described as evidence of a failed SAP posting attempt.
 
 Example discovered during verification:
 
@@ -1203,9 +1247,11 @@ PENDING
 
 Example Cloud Foundry execution:
 
+```bash
 BASE_URL="$APP_URL/service/NHBCAP01Service" \
 XSUAA_TOKEN="$XSUAA_TOKEN" \
 bash test/integration-suite-accounting-fixture.sh
+```
 
 Verified fixture result:
 
@@ -1231,7 +1277,7 @@ errorMessage=null
 
 ## 28. Troubleshooting Catalogue
 
-### 27.1 URL rejected: No host part in the URL
+### 28.1 URL rejected: No host part in the URL
 
 Cause:
 
@@ -1247,7 +1293,7 @@ export APP_URL='https://a79b9755trial-dev-nhbcap01-srv.cfapps.us10-001.hana.onde
 
 ---
 
-### 27.2 curl blank argument
+### 28.2 curl blank argument
 
 Example:
 
@@ -1275,7 +1321,7 @@ Check variable lengths before calling curl.
 
 ---
 
-### 27.3 OAuth invalid_client
+### 28.3 OAuth invalid_client
 
 Example:
 
@@ -1297,7 +1343,7 @@ reload both values from the same service-key JSON.
 
 ---
 
-### 27.4 Integration Suite invalid_token
+### 28.4 Integration Suite invalid_token
 
 Example:
 
@@ -1317,7 +1363,7 @@ nhb-integration-flow-runtime-key
 
 ---
 
-### 27.5 Integration Suite 500 with downstream 404
+### 28.5 Integration Suite 500 with downstream 404
 
 Example:
 
@@ -1333,7 +1379,7 @@ cf start nhb-mock-s4
 
 ---
 
-### 27.6 Destination cannot be loaded locally
+### 28.6 Destination cannot be loaded locally
 
 Example:
 
@@ -1349,7 +1395,7 @@ test through deployed NHBCAP01-srv.
 
 ---
 
-### 27.7 CAP returns HANA connection timeout
+### 28.7 CAP returns HANA connection timeout
 
 Example:
 
@@ -1369,7 +1415,7 @@ simple database-backed OData request
 
 ---
 
-### 27.8 Accounting configuration missing
+### 28.8 Accounting configuration missing
 
 Example:
 
@@ -1391,7 +1437,7 @@ set the required variables and restart the app.
 
 ---
 
-### 27.9 Restart performed but new code not active
+### 28.9 Restart performed but new code not active
 
 Symptom:
 
@@ -1513,13 +1559,17 @@ Completed baseline:
 11. successful CAP response parsing and SAP document identity persistence
 12. SAP accounting regression baseline of 44 PASS / 0 FAIL
 
-Recommended next steps:
+Current documentation and portfolio phase:
 
-1. freeze and commit this observability and HTTP-receiver baseline
-2. update docs/architecture.md with the verified correlation and receiver architecture
-3. update docs/sap-test-catalog.md with the new end-to-end evidence
-4. preserve the current Phase 1 responsibility boundary while the mock receiver remains in use
-5. strengthen Integration Suite error handling only where a demonstrated requirement exists
-6. consider moving SAP-specific transformation into Integration Suite in a later architecture phase
-7. replace the mock receiver with the live SAP S/4HANA Journal Entry service when the environment becomes available
-8. update AV-03 when implementation evidence is formally modeled in the EA repository
+1. Complete the focused documentation polish, including `docs/sap-test-catalog.md`, against the verified 44 PASS / 0 FAIL baseline and deployed mediation evidence.
+2. Keep `docs/architecture.md` aligned with the verified correlation and HTTP-receiver architecture recorded there.
+3. Present the completed AV-03 v1.0 architecture-to-implementation realization and the completed first CAP internals deep-understanding pass consistently across the portfolio.
+4. Review the documentation diffs before freezing and committing the polish changes.
+
+Selective future integration work:
+
+1. Preserve the current Phase 1 responsibility boundary while the mock receiver remains in use.
+2. Strengthen Integration Suite error handling only where a demonstrated requirement exists.
+3. Consider moving SAP-specific transformation into Integration Suite when a later architecture phase justifies it.
+4. Replace the mock receiver with the live SAP S/4HANA Journal Entry service when the environment becomes available, then record live posting and reversal evidence.
+5. Extend AV-03 only when additional verified implementation evidence warrants an update.

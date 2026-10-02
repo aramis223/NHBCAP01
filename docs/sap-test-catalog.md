@@ -17,7 +17,7 @@ This catalog defines the SAP S/4HANA preparation, integration, and regression te
 |---|---|
 | CD-01 Customer Management | In scope |
 | CD-02 Product Management | Conditional; reassess if SAP Product Master becomes required |
-| CD-03 Payment Management | In scope |
+| CD-03 Deposit Management | In scope |
 | CD-04 Financing & Credit Management | Conditional; core loan/credit lifecycle remains in core banking unless a SAP requirement is confirmed |
 | CD-05 Treasury & Liquidity Management | In scope |
 
@@ -28,9 +28,11 @@ This catalog defines the SAP S/4HANA preparation, integration, and regression te
 - `02 – CD-03 Payment Management — NHB ↔ SAP`
 - `03 – CD-05 Treasury & Liquidity Management — NHB ↔ SAP`
 
+The Signavio titles above retain their recorded names. The approved capability baseline uses CD-03 Deposit Management; payment handoff remains an integration use case.
+
 ## 5. Confirmed SAP integration references
 
-### CD-01 Customer Management
+### 5.1 CD-01 Customer Management
 
 - Business object: Business Partner
 - API: Business Partner (A2X)
@@ -51,7 +53,7 @@ Initial organization Business Partner payload:
 
 Start with the parent Business Partner entity. Add Address and Role associations only after the basic create test succeeds.
 
-### CD-03 Payment Management
+### 5.2 CD-03 Deposit Management — Payment Accounting Handoff
 
 - Business object: Journal Entry
 - API: Journal Entry - Post (Synchronous)
@@ -61,7 +63,7 @@ Start with the parent Business Partner entity. Add Address and Role associations
 - Relevant scope-item references: `J58` and `O58` — Accounting and Financial Close
 - Deployment requirement: choose the applicable scope item and confirm service activation and authorization in the appliance.
 
-### CD-05 Treasury & Liquidity Management
+### 5.3 CD-05 Treasury & Liquidity Management
 
 - Business object: Cash Flow
 - API technical name: `CASHFLOW_IN`
@@ -72,6 +74,8 @@ Start with the parent Business Partner entity. Add Address and Role associations
 - Prerequisites: configure company-code value mapping and AIF monitoring in S/4HANA.
 
 ## 6. Test catalog
+
+The table defines target scenarios and expected results. Recorded verification status is described in sections 7 and 8; these expectations do not imply successful live SAP execution.
 
 | ID | Test | Expected result |
 |---|---|---|
@@ -96,7 +100,7 @@ New accounting events are persisted with `postingStatus = PENDING`.
 
 `PENDING` means that NHBCAP01 has recorded an accounting obligation that has not yet been posted to SAP S/4HANA.
 
-For the initial SAP integration, the CAP layer will process one accounting event at a time through a governed accounting-posting operation rather than allowing direct updates to the read-only accounting-event entity.
+For the initial SAP integration, the CAP layer processes one accounting event at a time through a governed accounting-posting operation rather than allowing direct updates to the read-only accounting-event entity.
 
 ### 7.1 Initial Posting Lifecycle
 
@@ -139,7 +143,8 @@ The initial NHB-to-SAP mapping contract is:
 | `eventDate` | Candidate accounting/document date |
 | `amount` | Journal-entry amount |
 | `currency` | Transaction currency |
-| `correlationId` | External/reference identifier for traceability |
+| `ID` | Event UUID used to derive the SAP-safe 16-character `DocumentReferenceID` |
+| `correlationId` | Full business correlation identifier retained for traceability and the `X-Correlation-ID` header |
 | `payment_ID` | NHB payment traceability |
 | `financing_ID` | NHB financing traceability |
 | `installment_ID` | NHB installment traceability |
@@ -317,6 +322,7 @@ The responsibilities are separated as follows:
 - `journal-entry-soap.js` builds the normal synchronous SAP Journal Entry SOAP request.
 - `journal-entry-reversal-soap.js` builds the dedicated SAP journal-entry reversal request and deliberately excludes normal debit/credit posting items.
 - `transport.js` provides the shared HTTP transport boundary.
+- `journal-entry-response.js` parses the SAP synchronous confirmation and returns the SAP accounting document, company code, fiscal year, processing result, severity, log notes, and normalized external accounting-document reference.
 - Cross-cutting outbound timeout handling is provided through `srv/integration/http.js`.
 
 The shared timeout baseline provides:
@@ -338,8 +344,6 @@ SAP transport applies the same timeout policy through:
 Automatic retry is deliberately not part of this baseline.
 
 In particular, SAP accounting posting and reversal are not automatically retried because a transport timeout does not prove that the remote financial operation was not processed.
-
-- `journal-entry-response.js` parses the SAP synchronous confirmation and returns the SAP accounting document, company code, fiscal year, processing result, severity, log notes, and normalized external accounting-document reference.
 
 The transport supports two execution modes:
 
@@ -374,7 +378,7 @@ On successful normal posting or reversal, NHBCAP01 records:
 - `externalAccountingDocumentId`
 - `errorMessage = null`
 
-On transport, SAP, parsing, or integration failure, the accounting event is updated to:
+On transport, SAP, parsing, or integration failure after the external posting attempt begins, the accounting event is updated to:
 
 - `postingStatus = FAILED`
 - `errorMessage = normalized failure information`
@@ -532,7 +536,8 @@ The normalized journal-entry model currently includes:
 - amount
 - debit G/L account
 - credit G/L account
-- correlation reference
+- SAP-safe document reference derived from the accounting-event UUID
+- full business correlation identifier for traceability
 - NHB accounting-event identifier
 - payment identifier
 - financing identifier
@@ -584,7 +589,9 @@ The current required configuration includes:
 
 These values remain prototype configuration and must not be interpreted as approved production accounting policy.
 
- amount rejection
+The verified automated coverage includes:
+
+- invalid accounting amount rejection
 - SAP configuration loading from environment variables
 - missing SAP configuration detection
 - normal journal-entry SOAP construction
@@ -714,9 +721,9 @@ Live SAP execution therefore remains the external verification step for both:
 
 Every successful live SAP accounting test should then become a repeatable regression scenario in accordance with the catalog regression rule.
 
-### 7.8 Deployed CAP Accounting Boundary Verification
+### 7.8 Pre-configuration Deployed CAP Accounting Boundary Verification
 
-The deployed Cloud Foundry runtime has additionally been verified for the governed `postAccountingEvent` boundary.
+Before SAP accounting runtime configuration was enabled for the mock-mediated baseline in section 8, the deployed Cloud Foundry runtime was additionally verified for the governed `postAccountingEvent` boundary.
 
 Verified deployed behavior:
 
@@ -736,14 +743,6 @@ This verifies that NHBCAP01 does not falsely mark an accounting event as `FAILED
 
 The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
 
-- `externalCompanyCode` remains `null`
-- `externalFiscalYear` remains `null`
-
-This verifies that NHBCAP01 does not falsely mark an accounting event as `FAILED` or `POSTED` when SAP accounting configuration is unavailable before the external posting attempt begins.
-
-The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
-
-The deployed verification does not constitute live SAP posting evidence. `SAP-T05` and `SAP-T05R` remain pending successful execution against a runnable SAP S/4HANA system with valid accounting configuration and master data.
 
 ## 8. SAP Integration Suite End-to-End Verification
 
@@ -768,17 +767,17 @@ The current target is a controlled mock receiver rather than a live SAP S/4HANA 
 
 ---
 
-## 1. Integration Suite Smoke Test
+### 8.1. Integration Suite Smoke Test
 
-### Purpose
+#### Purpose
 
 Verify that the deployed Integration Suite iFlow accepts an authenticated SOAP/XML request and successfully forwards it to the configured receiver.
 
-### Runtime endpoint
+#### Runtime endpoint
 
 https://a79b9755trial.it-cpitrial05-rt.cfapps.us10-001.hana.ondemand.com/http/nhb/s4/journal-entry
 
-### Result
+#### Result
 
 PASS
 
@@ -798,13 +797,13 @@ FiscalYear:
 BusinessDocumentProcessingResultCode:
 SUCCESS
 
-### Evidence
+#### Evidence
 
 The request was sent from BAS using a valid Integration Suite OAuth bearer token.
 
 The response was returned through Integration Suite from the mock S/4HANA receiver.
 
-### Conclusion
+#### Conclusion
 
 The following path is verified:
 
@@ -816,17 +815,17 @@ BAS
 
 ---
 
-## 2. NHBCAP01 SOAP Builder Through Integration Suite
+### 8.2. NHBCAP01 SOAP Builder Through Integration Suite
 
-### Purpose
+#### Purpose
 
 Verify that the real NHBCAP01 journal-entry SOAP builder produces a payload accepted by the Integration Suite mediation flow.
 
-### Source
+#### Source
 
 srv/sap/journal-entry-soap.js
 
-### Test payload
+#### Test payload
 
 A journal-entry SOAP request was generated using:
 
@@ -840,7 +839,7 @@ Verified size:
 
 2094 bytes
 
-### Result
+#### Result
 
 PASS
 
@@ -860,7 +859,7 @@ FiscalYear:
 BusinessDocumentProcessingResultCode:
 SUCCESS
 
-### Conclusion
+#### Conclusion
 
 The following path is verified:
 
@@ -871,9 +870,9 @@ NHBCAP01 SOAP builder
 
 ---
 
-## 3. SAP DocumentReferenceID Constraint
+### 8.3. SAP DocumentReferenceID Constraint
 
-### Issue
+#### Issue
 
 A real Murabaha accounting event used a correlation identifier longer than the SAP SOAP contract allows.
 
@@ -893,7 +892,7 @@ This caused:
 
 Journal entry field reference exceeds SAP maximum length 16
 
-### Resolution
+#### Resolution
 
 A deterministic SAP-safe reference is now derived from the accounting event UUID.
 
@@ -914,7 +913,7 @@ SAP DocumentReferenceID:
 
 The full correlationId remains persisted in NHBCAP01.
 
-### Regression result
+#### Regression result
 
 PASS
 
@@ -922,18 +921,20 @@ The SAP accounting regression suite was updated to reflect the new outbound refe
 
 ---
 
-## 4. SAP Accounting Regression Baseline
+### 8.4. SAP Accounting Regression Baseline
 
-### Test command
+#### Test command
 
+```bash
 node --test \
   sap-journal-entry-soap.test.js \
   sap-journal-entry-response.test.js \
   sap-journal-entry-reversal-soap.test.js \
   sap-transport.test.js \
   sap-accounting.test.js
+```
 
-### Result
+#### Result
 
 44 tests
 
@@ -945,7 +946,7 @@ node --test \
 
 0 cancelled
 
-### Coverage
+#### Coverage
 
 The regression suite verifies:
 
@@ -975,7 +976,7 @@ The regression suite verifies:
 - SAP Destination transport
 - HTTP error handling
 
-### Conclusion
+#### Conclusion
 
 PASS
 
@@ -983,27 +984,27 @@ The SAP accounting implementation remained regression-clean after introducing th
 
 ---
 
-## 5. Destination Service Configuration Verification
+### 8.5. Destination Service Configuration Verification
 
-### Destination
+#### Destination
 
 NHB-INTEGRATION-SUITE-S4
 
-### Authentication
+#### Authentication
 
 OAuth2ClientCredentials
 
-### Target
+#### Target
 
 SAP Integration Suite runtime endpoint
 
-### Result
+#### Result
 
 PASS
 
 The Destination service was successfully resolved by the deployed NHBCAP01 application.
 
-### Conclusion
+#### Conclusion
 
 The following runtime abstraction is verified:
 
@@ -1015,13 +1016,13 @@ NHBCAP01
 
 ---
 
-## 6. Deployed PAYMENT_RECEIVED End-to-End Test
+### 8.6. Deployed PAYMENT_RECEIVED End-to-End Test
 
-### Purpose
+#### Purpose
 
 Verify that a real persisted MurabahaAccountingEvent can be posted from the deployed NHBCAP01 application through the complete Integration Suite path.
 
-### Event
+#### Event
 
 Event type:
 
@@ -1035,13 +1036,13 @@ Amount:
 
 USD 600.00
 
-### Invocation
+#### Invocation
 
 The deployed CAP action was called:
 
 postAccountingEvent
 
-### Result
+#### Result
 
 PASS
 
@@ -1065,7 +1066,7 @@ externalAccountingDocumentId:
 errorMessage:
 null
 
-### Conclusion
+#### Conclusion
 
 The following full application path is verified:
 
@@ -1082,13 +1083,13 @@ deployed NHBCAP01
 
 ---
 
-## 7. Original Payment Posting Before Reversal
+### 8.7. Original Payment Posting Before Reversal
 
-### Purpose
+#### Purpose
 
 Establish the SAP document identity required by the reversal path.
 
-### Event
+#### Event
 
 Accounting Event ID:
 
@@ -1106,7 +1107,7 @@ Payment ID:
 
 acc95f60-26b2-4ebf-8467-688ee7cee52d
 
-### Result
+#### Result
 
 PASS
 
@@ -1128,19 +1129,19 @@ externalAccountingDocumentId:
 errorMessage:
 null
 
-### Conclusion
+#### Conclusion
 
 The original SAP accounting identity was persisted successfully and made available to the reversal implementation.
 
 ---
 
-## 8. PAYMENT_REVERSED End-to-End Test
+### 8.8. PAYMENT_REVERSED End-to-End Test
 
-### Purpose
+#### Purpose
 
 Verify that a real PAYMENT_REVERSED accounting event can be posted through the same Integration Suite mediation architecture.
 
-### Event
+#### Event
 
 Accounting Event ID:
 
@@ -1158,7 +1159,7 @@ Payment ID:
 
 acc95f60-26b2-4ebf-8467-688ee7cee52d
 
-### Preconditions
+#### Preconditions
 
 The corresponding PAYMENT_RECEIVED event was already:
 
@@ -1176,7 +1177,7 @@ externalCompanyCode:
 externalFiscalYear:
 2026
 
-### Result
+#### Result
 
 PASS
 
@@ -1200,7 +1201,7 @@ externalAccountingDocumentId:
 errorMessage:
 null
 
-### Conclusion
+#### Conclusion
 
 The reversal path is verified through:
 
@@ -1213,13 +1214,13 @@ NHBCAP01
 
 ---
 
-## 9. Authentication Failure Test
+### 8.9. Authentication Failure Test
 
-### Scenario
+#### Scenario
 
 A NHBCAP01 XSUAA token was accidentally used against the Integration Suite runtime endpoint.
 
-### Result
+#### Result
 
 PASS — expected failure observed
 
@@ -1229,7 +1230,7 @@ HTTP status:
 
 The Integration Suite runtime rejected the token because its JWT audience belonged to the NHBCAP01 XSUAA client rather than the Integration Suite runtime client.
 
-### Conclusion
+#### Conclusion
 
 The architecture correctly enforces separate OAuth security contexts for:
 
@@ -1238,13 +1239,13 @@ The architecture correctly enforces separate OAuth security contexts for:
 
 ---
 
-## 10. Receiver Availability Failure Test
+### 8.10. Receiver Availability Failure Test
 
-### Scenario
+#### Scenario
 
 The mock S/4HANA Cloud Foundry application was stopped.
 
-### Result
+#### Result
 
 PASS — expected failure observed
 
@@ -1260,7 +1261,7 @@ Requested route:
 
 nhb-mock-s4.cfapps.us10-001.hana.ondemand.com
 
-### Recovery
+#### Recovery
 
 The receiver application was restarted:
 
@@ -1270,19 +1271,19 @@ After restart, the same Integration Suite request returned:
 
 HTTP 200
 
-### Conclusion
+#### Conclusion
 
 Integration Suite correctly surfaced downstream receiver unavailability.
 
 ---
 
-## 11. Local Destination Binding Failure
+### 8.11. Local Destination Binding Failure
 
-### Scenario
+#### Scenario
 
 The SAP destination-based transport was executed directly from a BAS-local Node process.
 
-### Result
+#### Result
 
 PASS — expected limitation observed
 
@@ -1290,27 +1291,27 @@ Error:
 
 Could not find service binding of type 'destination'
 
-### Cause
+#### Cause
 
 The local Node process did not inherit the Cloud Foundry Destination service binding.
 
-### Resolution
+#### Resolution
 
 The destination-based transport was tested through the deployed NHBCAP01-srv application, where the Destination service is bound.
 
-### Conclusion
+#### Conclusion
 
 The verified application-level test environment is Cloud Foundry rather than an unbound local BAS process.
 
 ---
 
-## 12. Missing SAP Accounting Configuration Failure
+### 8.12. Missing SAP Accounting Configuration Failure
 
-### Scenario
+#### Scenario
 
 The deployed postAccountingEvent action was invoked before SAP_ACCOUNTING_* environment variables were configured.
 
-### Result
+#### Result
 
 PASS — expected failure observed
 
@@ -1324,7 +1325,7 @@ createdByUser,
 debitAccount,
 creditAccount
 
-### Resolution
+#### Resolution
 
 The following variables were configured:
 
@@ -1342,19 +1343,19 @@ SAP_ACCOUNTING_CREDIT_ACCOUNT=410000
 
 SAP_ACCOUNTING_REVERSAL_REASON=01
 
-### Conclusion
+#### Conclusion
 
 Accounting execution correctly fails before outbound transport when mandatory business configuration is incomplete.
 
 ---
 
-## 13. HANA Connection Timeout Observation
+### 8.13. HANA Connection Timeout Observation
 
-### Scenario
+#### Scenario
 
 Database-backed OData requests temporarily failed.
 
-### Result
+#### Result
 
 Observed failure:
 
@@ -1364,7 +1365,7 @@ Runtime log:
 
 TimeoutError: ResourceRequest timed out
 
-### Validation
+#### Validation
 
 The failure affected multiple database-backed entities and was therefore not specific to MurabahaAccountingEvent.
 
@@ -1372,27 +1373,27 @@ After database connectivity recovered, the same request returned:
 
 HTTP 200
 
-### Conclusion
+#### Conclusion
 
 The failure was isolated to HANA/database availability rather than Integration Suite.
 
 ---
 
-## 14. Deployment Lifecycle Verification
+### 8.14. Deployment Lifecycle Verification
 
-### Scenario
+#### Scenario
 
 The source code was modified locally and the Cloud Foundry application was restarted.
 
-### Observation
+#### Observation
 
 The old behavior remained active.
 
-### Cause
+#### Cause
 
 cf restart does not upload changed source code.
 
-### Resolution
+#### Resolution
 
 A new MTA build and deployment were performed:
 
@@ -1400,7 +1401,7 @@ mbt build
 
 cf deploy mta_archives/*.mtar -f
 
-### Verification
+#### Verification
 
 The Cloud Foundry application showed a new:
 
@@ -1408,19 +1409,19 @@ last uploaded
 
 timestamp.
 
-### Conclusion
+#### Conclusion
 
 Source changes require a real deployment rather than only an application restart.
 
 ---
 
-## 15. Correlation and HTTP Receiver Verification
+### 8.15. Correlation and HTTP Receiver Verification
 
-### Purpose
+#### Purpose
 
 Verify end-to-end operational traceability for SAP accounting messages and confirm the Phase 1 HTTP receiver design.
 
-### Correlation source
+#### Correlation source
 
 The originating NHBCAP01 accounting event contains:
 
@@ -1432,7 +1433,7 @@ The transport propagates it as:
 
 X-Correlation-ID
 
-### Integration Suite configuration
+#### Integration Suite configuration
 
 The iFlow Runtime Configuration permits:
 
@@ -1448,7 +1449,7 @@ Repository source:
 
 srv/integration/setNhbCorrelationMpl.groovy
 
-### Verified test fixture
+#### Verified test fixture
 
 A fresh accounting event was generated using:
 
@@ -1466,7 +1467,7 @@ Initial status:
 
 PENDING
 
-### Integration Suite result
+#### Integration Suite result
 
 PASS
 
@@ -1483,7 +1484,7 @@ CustomHeaderProperties:
 NHB_CorrelationId =
 PAY-IS-20260930234523-55694
 
-### Receiver result
+#### Receiver result
 
 The iFlow used an HTTP receiver to forward the SAP SOAP/XML payload unchanged to:
 
@@ -1495,7 +1496,7 @@ NHBCAP01 owns SOAP request construction and SAP response parsing.
 
 Integration Suite owns mediation, routing, monitoring, endpoint abstraction, and correlation observability.
 
-### CAP persistence result
+#### CAP persistence result
 
 The same accounting event was verified after Integration Suite processing.
 
@@ -1521,7 +1522,7 @@ null
 
 The same NHB correlation identifier remained persisted on the accounting event.
 
-### Conclusion
+#### Conclusion
 
 PASS
 
@@ -1544,7 +1545,7 @@ MurabahaAccountingEvent.correlationId
 
 ---
 
-## 16. Integration Suite Verification Summary
+### 8.16. Integration Suite Verification Summary
 
 The following verification stages are complete:
 
@@ -1590,7 +1591,7 @@ PASS — deployment lifecycle verification
 
 ---
 
-## 17. Current Test Baseline
+### 8.17. Current Test Baseline
 
 As of 30 September 2026:
 
@@ -1623,13 +1624,15 @@ Live SAP S/4HANA Journal Entry execution:
 
 PENDING
 
-The current baseline demonstrates a complete application-level mediation path through SAP Integration Suite while preserving a clear distinction between verified mock execution and future live SAP execution.
+The current baseline demonstrates a complete application-level mediation path through SAP Integration Suite while preserving a clear distinction between verified mock execution and pending live SAP execution.
 
-## 18. Regression rule
+AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0. The first CAP internals deep-understanding pass is completed, and portfolio packaging and documentation polish are now the current phase.
 
-Every successful test becomes a repeatable regression scenario. Record the test date, S/4HANA environment, payload reference, returned identifier, result, and any configuration dependencies.
+## 9. Regression rule
 
-## 19. Sources
+Every successful test becomes a repeatable regression scenario. Record the test date, receiver environment (controlled mock or live S/4HANA), payload reference, returned identifier, result, and any configuration dependencies.
+
+## 10. Sources
 
 - [Business Partner (A2X) API](https://help.sap.com/docs/SAP_S4HANA_CLOUD/3c916ef10fc240c9afc594b346ffaf77/85043858ea0f9244e10000000a4450e5.html)
 - [Cash Flow API](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/d4eb54ea54944b04923af573b28a1e7d/80ea959a2ccf4bb29e88bf0225679283.html)

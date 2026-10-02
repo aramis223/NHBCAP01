@@ -128,7 +128,7 @@ Contains selected traceability artifacts required for validation, analysis, and 
 
 `07 Architecture Views`
 
-Reserved for selected cross-layer, stakeholder-oriented, executive, portfolio, and implementation-realization views.
+Contains selected cross-layer, stakeholder-oriented, executive, portfolio, and implementation-realization views. AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0. Additional views should be introduced only when justified by an architectural concern.
 
 Empty packages are acceptable when no current architectural need justifies additional modeling.
 
@@ -481,6 +481,14 @@ Within NHB, `Originate Financing` represents a narrower post-credit stage rather
 
 ---
 
+### Architecture-to-Implementation Realization
+
+AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0. SAP Integration Suite mediation is implemented and verified against a controlled mock S/4HANA receiver; live SAP accounting execution remains pending external verification.
+
+The first CAP internals deep-understanding pass is completed. Portfolio packaging and documentation polish are the current phase. These implementation checkpoints preserve the logical architecture and the approved v1.0 modeling conventions.
+
+---
+
 ## Architecture Completeness Principle
 
 A package does not need to be populated merely because it exists.
@@ -491,9 +499,9 @@ Examples currently permitted to remain empty include selected:
 - Integration Interface
 - Integration Pattern
 - Integration Service
-- Architecture View
+- additional Architecture View
 
-packages.
+packages. This does not describe the completed AV-03 view as empty or deferred.
 
 Artifacts should be added only when they explain a real architectural concern.
 
@@ -501,7 +509,7 @@ Artifacts should be added only when they explain a real architectural concern.
 
 ## Baseline Freeze Criteria
 
-The NHB Enterprise Architecture repository can be considered ready for Baseline v1.0 when:
+The following criteria govern readiness for an architecture baseline freeze and remain applicable when reviewing later revisions:
 
 - major semantic issues are resolved
 - domain naming is consistent
