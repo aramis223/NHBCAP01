@@ -24,7 +24,7 @@ The project combines enterprise architecture modeling, banking domain design, SA
 
 The principal banking demonstration scenario is **Sharia-compliant Murabaha financing**, supported by customer/account integration and SAP accounting integration patterns.
 
-The project is intentionally developed as a learning and portfolio environment rather than presented as a production banking platform.
+The project is intentionally developed as a learning and portfolio environment rather than presented as a production banking platform. The current phase is portfolio packaging and polish.
 
 ---
 
@@ -134,15 +134,11 @@ Representative financing processes include:
 - Service Financing
 - Manage Repayment & Settlement
 
-### Architecture-to-Implementation View
+### AV-03 — NHBCAP01 Architecture-to-Implementation Realization
 
-A future:
+**AV-03 — NHBCAP01 Architecture-to-Implementation Realization** is completed as **v1.0**.
 
-`AV-03 — NHBCAP01 Architecture-to-Implementation Realization`
-
-is intentionally deferred until implementation evidence is formally modeled in the EA repository.
-
-The aim is to establish explicit traceability from architecture elements to verified SAP CAP, integration, deployment, and test evidence.
+The view establishes explicit traceability from architecture elements to verified SAP CAP, integration, deployment, and test evidence. It connects the governed enterprise-architecture baseline to the implemented Murabaha, external-banking, SAP accounting, SAP Integration Suite, and verification artifacts.
 
 ---
 
@@ -336,7 +332,9 @@ The project distinguishes clearly between:
 - configured destination connectivity
 - actual live SAP accounting execution
 
-Live production-equivalent SAP execution is not claimed until an appropriate SAP S/4HANA environment and communication arrangement are available.
+The SAP integration methodology is completed, and the SAP Integration Suite mediation baseline is implemented and verified. The controlled flow includes correlation propagation through `srv/integration/setNhbCorrelationMpl.groovy`, fixture-driven execution through `test/integration-suite-accounting-fixture.sh`, and delivery to the `mock-s4` receiver.
+
+The current SAP S/4HANA receiver is a controlled mock endpoint. Live production-equivalent SAP execution is not claimed until an appropriate SAP S/4HANA environment and communication arrangement are available.
 
 ---
 
@@ -418,7 +416,7 @@ The SAP accounting baseline includes tests for:
 The verified test baseline includes:
 
     SAP accounting suite:
-    43 PASS / 0 FAIL
+    44 PASS / 0 FAIL
 
     Murabaha servicing/accounting regression:
     14 PASS / 0 FAIL
@@ -466,20 +464,11 @@ The current EA repository contains selected Application Interactions such as:
 - Product Offering Exchange for Deposit Account Establishment
 - Product Offering Exchange for Financing Origination
 
-Some integration packages remain intentionally unpopulated.
+The SAP integration methodology is completed. The implemented SAP Integration Suite mediation baseline now provides concrete evidence for accounting-message mediation, NHB correlation propagation, controlled receiver handling, and repeatable regression verification.
 
-Detailed modeling of:
+The implemented baseline complements the existing CAP, Fiserv, and destination-based integration patterns. Broader modeling of Integration Interfaces, Integration Patterns, Integration Services, and explicit Integration Information Flows remains intentionally selective and will be expanded only where supported by concrete implementation requirements.
 
-- Integration Interfaces
-- Integration Patterns
-- Integration Services
-- explicit Integration Information Flows
-
-will be introduced only when supported by concrete implementation requirements.
-
-The NHBCAP01 integration phase, including SAP and external-provider integration, is expected to provide this evidence.
-
-Future SAP Integration Suite work is expected to strengthen this layer with implementation-backed integration patterns, mediation, monitoring, and API-management evidence.
+The current S/4 receiver is the controlled `mock-s4` endpoint; this is not a claim of live SAP S/4HANA execution.
 
 ---
 
@@ -506,11 +495,7 @@ The logical technology baseline contains:
 - NHB Integration Service
 - NHB Technology Security Service
 
-The current Technology Architecture remains intentionally logical.
-
-Detailed mapping to physical technologies and deployed services belongs to the implementation-realization phase.
-
-Candidate future physical mappings may include:
+The logical Technology Architecture is now connected to verified implementation-realization evidence for:
 
 - SAP BTP
 - Cloud Foundry
@@ -518,9 +503,10 @@ Candidate future physical mappings may include:
 - SAP HANA / HDI
 - XSUAA
 - SAP Destination Service
-- SAP Integration Suite
-- SAP S/4HANA
-- selected AWS services
+- SAP Integration Suite mediation
+- controlled SAP S/4HANA receiver simulation
+
+Broader physical-technology realization mapping, live SAP S/4HANA connectivity, and selected AWS services remain future scope where additional evidence is justified.
 
 ---
 
@@ -572,19 +558,35 @@ Representative project structure:
     │   │   └── transport.js
     │   │
     │   └── integration/
-    │       └── http.js
+    │       ├── http.js
+    │       └── setNhbCorrelationMpl.groovy
+    │
+    ├── mock-s4/
+    │   └── server.js
+    │
+    ├── mock-temenos/
+    │   └── server.js
     │
     ├── test/
+    │   ├── integration-suite-accounting-fixture.sh
     │   ├── murabaha-lifecycle.sh
     │   ├── murabaha-lifecycle-negative.sh
     │   ├── murabaha-servicing.sh
     │   ├── murabaha-accounting.sh
     │   └── murabaha-exceptional-states.sh
     │
+    ├── sap-accounting.test.js
+    ├── sap-journal-entry-response.test.js
+    ├── sap-journal-entry-reversal-soap.test.js
+    ├── sap-journal-entry-soap.test.js
+    ├── sap-transport.test.js
+    │
     ├── docs/
     │   ├── architecture.md
     │   ├── ea-understanding-guide.md
     │   ├── ea-governance-baseline.md
+    │   ├── fiserv-integration.md
+    │   ├── integration-suite-runbook.md
     │   ├── islamic-banking-product-track.md
     │   └── sap-test-catalog.md
     │
@@ -623,6 +625,14 @@ Defines the NHB architecture governance baseline, including:
 - modeling conventions
 - naming/versioning principles
 - baseline and review rules
+
+### `docs/fiserv-integration.md`
+
+Documents the NHB-owned Fiserv integration abstraction, authentication, mapping, query, pagination, timeout, and error-handling approach.
+
+### `docs/integration-suite-runbook.md`
+
+Documents the verified SAP Integration Suite accounting mediation baseline, controlled fixture, correlation handling, mock S/4 receiver, and repeatable operational walkthrough.
 
 ### `docs/islamic-banking-product-track.md`
 
@@ -693,6 +703,7 @@ Completed baseline work includes:
 - integration architecture review
 - technology architecture review
 - cross-layer architecture views
+- AV-03 — NHBCAP01 Architecture-to-Implementation Realization v1.0
 
 ### Application and Integration
 
@@ -710,7 +721,13 @@ Implemented and verified areas include:
 - HANA / HDI persistence
 - Destination Service integration support
 - timeout and error-handling baseline
+- SAP integration methodology
+- SAP Integration Suite mediation baseline, implemented and verified against a controlled mock S/4 receiver
+- SAP accounting regression baseline: **44 PASS / 0 FAIL**
+- CAP internals first deep-understanding pass
 - regression testing
+
+The current phase is portfolio packaging and polish.
 
 ---
 
@@ -718,13 +735,14 @@ Implemented and verified areas include:
 
 The following are intentionally deferred rather than treated as missing baseline work:
 
-- formal architecture-to-implementation realization view
 - full system-of-record ownership modeling
 - comprehensive Information Flow modeling
 - exhaustive Integration Interface modeling
 - Integration Pattern and Integration Service expansion
 - physical Technology realization mapping
 - expanded traceability-view presentation
+- broader Information, Integration, and physical Technology modeling where additional evidence justifies it
+- additional SAP or AWS tooling where it adds genuine architectural value
 - live SAP S/4HANA accounting execution where environment access is required
 
 These items will be introduced when implementation evidence is sufficient to support defensible architectural relationships and technical claims.
@@ -733,18 +751,15 @@ These items will be introduced when implementation evidence is sufficient to sup
 
 ## Next Phase
 
-The next project phase shifts from establishing the EA baseline toward **implementation realization and technical mastery**.
+The current project phase is **portfolio packaging and polish**.
 
-Planned areas include:
+Current priorities include:
 
-1. SAP integration methodology
-2. focused SAP Integration Suite implementation
-3. deeper CAP internals and code-path understanding
-4. architecture-to-implementation traceability
-5. additional SAP tooling where architecturally justified
-6. live SAP S/4HANA integration where an appropriate environment becomes available
-7. selective AWS hands-on work where it adds genuine architectural value
-8. portfolio packaging and interview-ready evidence
+1. consolidating the completed AV-03 v1.0 realization evidence
+2. polishing repository navigation, diagrams, runbooks, and cross-references
+3. refining the repeatable demonstration and interview narrative
+4. preserving the controlled evidence boundary around the mock S/4 receiver
+5. defining prerequisites and acceptance criteria for any future live-system validation
 
 The project will continue to prefer a small number of meaningful, end-to-end implementations over superficial use of many technologies.
 
