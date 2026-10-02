@@ -3002,6 +3002,8 @@ The Phase 1 observability baseline now includes:
 - Groovy MPL enrichment as searchable `NHB_CorrelationId`
 - verified correlation continuity from NHBCAP01 to Integration Suite monitoring
 
+Runtime correlation verification on 2026-10-03 matched `PAY-IS-20260930234523-55694` on persisted CAP accounting event `e7a31f2d-98b9-432a-ba09-62169b222308` (`POSTED`) and Integration Suite MPL custom header `NHB_CorrelationId` (`COMPLETED`). SAP-style document identity is `1000-2026-1900000001`; Integration Suite retains its own native technical correlation ID separately. Detailed runtime evidence is recorded in [Integration Suite Runbook, section 27.3](integration-suite-runbook.md#273-mpl-custom-property). This closes the observability checkpoint for the existing mock-receiver baseline.
+
 Additional future improvements may include:
 
 - structured integration error mapping

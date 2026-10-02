@@ -1192,6 +1192,16 @@ This provides an operational traceability path from the NHBCAP01 accounting even
 
 The Integration Suite internal CorrelationId remains separate from the NHB business correlation identifier.
 
+#### Runtime correlation verification — 2026-10-03
+
+CAP persisted `PAYMENT_RECEIVED` accounting event `e7a31f2d-98b9-432a-ba09-62169b222308` with `correlationId = PAY-IS-20260930234523-55694` and `postingStatus = POSTED`.
+
+The event records SAP-style accounting document `1900000001`, company code `1000`, fiscal year `2026`, and external document ID `1000-2026-1900000001`. The receiver remains the controlled mock SAP S/4HANA receiver.
+
+The corresponding `NHB_S4_Journal_Entry_Mediation` MPL message `AGq9n1MJg4GgqsB1G7Y3lgIhIx4a` completed with `NHB_CorrelationId = PAY-IS-20260930234523-55694`. Its native technical correlation ID is `AGq9n1MNd3mH1YxKoLiEXOsvJC8w`, independently maintained by Integration Suite.
+
+This verifies the business correlation value from CAP persistence through `X-Correlation-ID` to searchable MPL metadata, with MPL status `COMPLETED` and the CAP accounting event `POSTED`. The Integration Suite observability checkpoint is verified and closed.
+
 ### 27.4 Verified end-to-end correlation path
 
 The verified path is:
