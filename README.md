@@ -419,7 +419,7 @@ The verified test baseline includes:
     44 PASS / 0 FAIL
 
     Murabaha servicing/accounting regression:
-    14 PASS / 0 FAIL
+    15 PASS / 0 FAIL
 
 These results represent the controlled project environment and are not presented as production certification.
 
