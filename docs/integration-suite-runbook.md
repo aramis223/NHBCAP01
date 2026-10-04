@@ -1569,12 +1569,12 @@ Completed baseline:
 11. successful CAP response parsing and SAP document identity persistence
 12. SAP accounting regression baseline of 44 PASS / 0 FAIL
 
-Current documentation and portfolio phase:
+Current documentation and portfolio status:
 
-1. Complete the focused documentation polish, including `docs/sap-test-catalog.md`, against the verified 44 PASS / 0 FAIL baseline and deployed mediation evidence.
-2. Keep `docs/architecture.md` aligned with the verified correlation and HTTP-receiver architecture recorded there.
-3. Present the completed AV-03 v1.0 architecture-to-implementation realization and the completed first CAP internals deep-understanding pass consistently across the portfolio.
-4. Review the documentation diffs before freezing and committing the polish changes.
+1. Documentation has been aligned with the verified 44 PASS / 0 FAIL SAP accounting baseline and deployed mediation evidence.
+2. `docs/architecture.md` reflects the verified correlation and HTTP-receiver architecture.
+3. AV-03 v1.0 and the first CAP internals deep-understanding pass are represented consistently across the portfolio.
+4. Final documentation consistency and freeze verification are in progress.
 
 Selective future integration work:
 
