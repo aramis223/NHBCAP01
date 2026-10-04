@@ -3,9 +3,15 @@ const {
 } = require('@sap-cloud-sdk/http-client');
 
 const {
+    disableExceptionLogger
+} = require('@sap-cloud-sdk/util');
+
+const {
     fetchWithTimeout,
     getHttpTimeoutMs
 } = require('../integration/http');
+
+disableExceptionLogger();
 
 const JOURNAL_ENTRY_SOAP_ACTION =
     'http://sap.com/xi/SAPSCORE/SFIN/' +
@@ -75,31 +81,53 @@ async function postSoapRequest(
             }
             : {};
 
-    if (config.mode === 'destination') {
-        const response =
-            await httpExecutor(
-                {
-                    destinationName:
-                        config.destinationName
-                },
-                {
-                    method: 'POST',
-                    timeout: getHttpTimeoutMs(),
-                    headers: {
-                        'Content-Type':
-                            'text/xml; charset=utf-8',
-                        Accept: 'text/xml',
-                        SOAPAction:
-                            JOURNAL_ENTRY_SOAP_ACTION,
-                        ...correlationHeaders
+     if (config.mode === 'destination') {
+        try {
+            const response =
+                await httpExecutor(
+                    {
+                        destinationName:
+                            config.destinationName
+                    },
+                    {
+                        method: 'POST',
+                        timeout: getHttpTimeoutMs(),
+                        headers: {
+                            'Content-Type':
+                                'text/xml; charset=utf-8',
+                            Accept: 'text/xml',
+                            SOAPAction:
+                                JOURNAL_ENTRY_SOAP_ACTION,
+                            ...correlationHeaders
                         },
-                    data: xml
-                }
-            );
+                        data: xml
+                    },
+                    {
+                        fetchCsrfToken: false
+                    }
+                );
 
-        return typeof response.data === 'string'
-            ? response.data
-            : JSON.stringify(response.data);
+            return typeof response.data === 'string'
+                ? response.data
+                : JSON.stringify(response.data);
+        } catch (error) {
+            const status =
+                error?.response?.status ||
+                error?.cause?.response?.status ||
+                error?.rootCause?.response?.status;
+
+            const detail =
+                status
+                    ? `HTTP ${status}`
+                    : String(
+                        error?.message ||
+                        'unknown transport error'
+                    );
+
+            throw new Error(
+                `SAP destination request failed: ${detail}`
+            );
+        }
     }
 
     const response = await fetchWithTimeout(

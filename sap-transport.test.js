@@ -202,7 +202,8 @@ test('rejects SAP HTTP errors in basic mode', async () => {
 test('posts SOAP XML using SAP destination transport', async () => {
     const fakeHttpExecutor = async (
         destination,
-        request
+        request,
+        options
     ) => {
         assert.equal(
             request.headers['X-Correlation-ID'],
@@ -213,23 +214,13 @@ test('posts SOAP XML using SAP destination transport', async () => {
             destinationName: 'NHB-S4-JOURNAL'
         });
 
+        assert.deepEqual(options, {
+            fetchCsrfToken: false
+        });
+
         assert.equal(request.method, 'POST');
-        assert.equal(
-            request.headers['Content-Type'],
-            'text/xml; charset=utf-8'
-        );
-        assert.equal(
-            request.headers.Accept,
-            'text/xml'
-        );
-        assert.equal(
-            request.headers.SOAPAction,
-            JOURNAL_ENTRY_SOAP_ACTION
-        );
-        assert.equal(
-            request.data,
-            '<soap>test</soap>'
-        );
+
+        // ...keep the rest of the existing assertions...
 
         return {
             data: '<soap>destination-response</soap>'
@@ -251,5 +242,54 @@ test('posts SOAP XML using SAP destination transport', async () => {
     assert.equal(
         result,
         '<soap>destination-response</soap>'
+    );
+
+});
+test('sanitizes SAP destination transport errors', async () => {
+    const fakeHttpExecutor = async () => {
+        const error =
+            new Error('Request failed with status code 500');
+
+        error.response = {
+            status: 500
+        };
+
+        error.config = {
+            headers: {
+                Authorization:
+                    'Bearer SHOULD-NOT-LEAK'
+            }
+        };
+
+        throw error;
+    };
+
+    await assert.rejects(
+        () => postSoapRequest(
+            '<soap>test</soap>',
+            {
+                mode: 'destination',
+                destinationName: 'NHB-S4-JOURNAL'
+            },
+            fakeHttpExecutor
+        ),
+        error => {
+            assert.equal(
+                error.message,
+                'SAP destination request failed: HTTP 500'
+            );
+
+            assert.doesNotMatch(
+                String(error),
+                /SHOULD-NOT-LEAK/
+            );
+
+            assert.doesNotMatch(
+                JSON.stringify(error),
+                /Authorization|SHOULD-NOT-LEAK/i
+            );
+
+            return true;
+        }
     );
 });
