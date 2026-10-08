@@ -811,3 +811,39 @@ The architectural principle is:
 CAP therefore performs the role of integration and orchestration rather than simply exposing the external core-banking API unchanged.
 
 No API keys, API secrets, OAuth access tokens, or other credentials are stored in this documentation.
+## Transaction history — verified 9 October 2026
+
+Implemented read-only DDA transaction retrieval through:
+POST /acctservice/acctmgmt/acctTrn/secured
+
+CAP exposes getFiservAccountTransactions with accountId,
+startDateTime, endDateTime and direction (Debit or Credit).
+
+Verified through Postman, the local client, the local CAP endpoint,
+and the deployed Cloud Foundry endpoint.
+
+Certification example:
+- Account: 110000000055
+- Transaction: 53Cbz6owDW2y_Wwob3s6OtO2
+- Direction: Debit
+- Amount: USD 2.11
+- Description: Internal Funds Trans
+- Posted: 2025-05-27T14:16:54.480
+- Status: Valid
+
+Provider date-times are retained as text without assuming a timezone.
+CAP obtains a fresh Fiserv OAuth token for each provider call.
+
+Current selection limits:
+- DDA accounts and CORE transactions
+- Maximum five records; no cursor continuation
+- Amount range 1–20000
+- Posted date descending
+
+This is a limited inquiry baseline, not complete transaction history.
+The example has not been classified as a Murabaha repayment.
+No payment ingestion or SAP posting is performed by this function.
+
+Validation: JavaScript syntax and CDS compilation passed;
+all 59 existing source tests passed; git diff --check was clean.
+The new endpoint was separately verified against Fiserv.

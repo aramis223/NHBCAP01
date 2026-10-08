@@ -3,6 +3,7 @@ require('dotenv').config();
 const cds = require('@sap/cds');
 const { getPartyList, getParty } = require('./fiserv/parties');
 const { getAccountDetails } = require('./fiserv/accounts');
+const { getAccountTransactions } = require('./fiserv/transactions');
 const {
     postJournalEntry,
     postJournalEntryReversal
@@ -1268,6 +1269,56 @@ try {
             };
         } catch (error) {
             console.error('Fiserv account request failed:', error);
+            return req.reject(502, 'Fiserv service is currently unavailable.');
+        }
+    });
+    this.on('getFiservAccountTransactions', async req => {
+        const { accountId, startDateTime, endDateTime, direction } = req.data;
+        if (!accountId || !startDateTime || !endDateTime) {
+            return req.reject(400, 'accountId, startDateTime and endDateTime are required.');
+        }
+        if (!['Debit', 'Credit'].includes(direction)) {
+            return req.reject(400, 'direction must be Debit or Credit.');
+        }
+        // Provider date-times have no timezone; preserve that contract.
+        const datePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?$/;
+        const validDateTime = value => {
+            if (!datePattern.test(value)) return false;
+            const normalized = value.length === 19 ? `${value}.000` : value;
+            const parsed = new Date(`${normalized}Z`);
+            return Number.isFinite(parsed.getTime()) &&
+                parsed.toISOString().slice(0, -1) === normalized;
+        };
+        if (!validDateTime(startDateTime) || !validDateTime(endDateTime) ||
+            Date.parse(`${startDateTime}Z`) > Date.parse(`${endDateTime}Z`)) {
+            return req.reject(400, 'Supply an ordered date range as YYYY-MM-DDTHH:mm:ss or YYYY-MM-DDTHH:mm:ss.SSS.');
+        }
+        try {
+            const data = await getAccountTransactions(
+                accountId, process.env.FISERV_ORG_ID,
+                { startDateTime, endDateTime, direction }
+            );
+            return {
+                accountId,
+                transactions: (data.AcctTrnRec || []).map(record => {
+                    const info = record.AcctTrnInfo || {};
+                    return {
+                        transactionId: record.AcctTrnKeys?.AcctTrnId,
+                        transactionCode: info.TrnCode,
+                        direction: info.DrCrType,
+                        source: info.TrnSrc,
+                        memoPosted: info.MemoPostInd,
+                        postedDateTime: info.PostedDt,
+                        transactionDateTime: info.TrnDt,
+                        amount: info.TrnAmt?.Amt,
+                        currency: info.TrnAmt?.CurCode?.CurCodeValue,
+                        descriptions: info.Desc || [],
+                        status: record.AcctTrnStatus?.AcctTrnStatusCode
+                    };
+                })
+            };
+        } catch (error) {
+            console.error('Fiserv transaction request failed:', error.message);
             return req.reject(502, 'Fiserv service is currently unavailable.');
         }
     });

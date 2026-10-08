@@ -94,6 +94,32 @@ service NHBCAP01Service {
         accountId : String
     ) returns FiservAccount;
 
+    type FiservTransaction {
+        transactionId : String;
+        transactionCode : String;
+        direction : String;
+        source : String;
+        memoPosted : Boolean;
+        postedDateTime : String;
+        transactionDateTime : String;
+        amount : Decimal(15,2);
+        currency : String;
+        descriptions : many String;
+        status : String;
+    }
+
+    type FiservTransactionPage {
+        accountId : String;
+        transactions : many FiservTransaction;
+    }
+
+    function getFiservAccountTransactions(
+        accountId : String,
+        startDateTime : String,
+        endDateTime : String,
+        direction : String
+    ) returns FiservTransactionPage;
+
     action postMurabahaPayment(
         financingId      : UUID,
         installmentId    : UUID,
@@ -118,7 +144,6 @@ service NHBCAP01Service {
     entity MurabahaAccountingEvent
     as projection on my.MurabahaAccountingEvent;
 }
-
 annotate NHBCAP01Service.MurabahaFinancing with @(
     UI.HeaderInfo : {
         TypeName       : 'Murabaha Contract',
