@@ -90,7 +90,13 @@ function validateMessageContext(messageContext) {
             );
         }
     }
-
+    for (const field of ['serviceMessageId', 'journalEntryMessageId']) {
+        if (String(messageContext[field]).length > 35) {
+            throw new Error(
+                `SOAP message context field ${field} exceeds SAP maximum length 35`
+            );
+        }
+    }
     return messageContext;
 }
 

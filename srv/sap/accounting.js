@@ -205,9 +205,9 @@ function mapAccountingEventToJournalEntryReversal(
 function createSoapMessageContext() {
     return {
         serviceMessageId:
-            `NHB-${crypto.randomUUID()}`,
+            `NHB${crypto.randomUUID().replaceAll('-', '')}`,
         journalEntryMessageId:
-            `NHB-JE-${crypto.randomUUID()}`,
+            `NHB${crypto.randomUUID().replaceAll('-', '')}`,
         creationDateTime:
             new Date().toISOString()
     };

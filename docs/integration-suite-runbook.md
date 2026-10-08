@@ -1583,3 +1583,86 @@ Selective future integration work:
 3. Consider moving SAP-specific transformation into Integration Suite when a later architecture phase justifies it.
 4. Replace the mock receiver with the live SAP S/4HANA Journal Entry service when the environment becomes available, then record live posting and reversal evidence.
 5. Extend AV-03 only when additional verified implementation evidence warrants an update.
+
+## Verified CAL S/4HANA posting and reversal — 2026-10-09
+
+Real SAP S/4HANA CAL integration verified through:
+NHBCAP01 → BTP Destination → Integration Suite → Cloud Connector → S/4HANA.
+
+### Connectivity
+
+- Cloud Connector Location ID: CAL-S4-REF
+- Backend: HTTPS, vhcals4hci.dummy.nodomain:44300
+- iFlow receiver: On-Premise, using an http:// virtual address
+- Service path:
+  /sap/bc/srt/xip/sap/journalentrycreaterequestconfi/100/z_nhb_journal_entry_create/z_nhb_journal_entry_create_bind
+- Query: sap-client=100
+- Authentication: Basic, credential alias NHB_S4_INT
+- Receiver request headers: traceparent|Content-Type|SOAPAction
+- iFlow allowed headers: X-Correlation-ID|Content-Type|SOAPAction
+- SOAP 1.1; Content-Type: text/xml; charset=utf-8
+
+### Tested sandbox configuration
+
+These values supersede the earlier mock examples for this CAL deployment:
+
+- SAP_ACCOUNTING_COMPANY_CODE=1710
+- SAP_ACCOUNTING_DEBIT_ACCOUNT=10010000 (Petty Cash)
+- SAP_ACCOUNTING_CREDIT_ACCOUNT=12530100 (External Payments Clearing)
+- SAP_ACCOUNTING_DOCUMENT_TYPE=SA
+- SAP_ACCOUNTING_BUSINESS_TRANSACTION_TYPE=RFBU
+- SAP_ACCOUNTING_CREATED_BY_USER=NHBCAP01
+- SAP_ACCOUNTING_REVERSAL_REASON=01
+- NHB_HTTP_TIMEOUT_MS=90000
+
+Company code, debit/credit accounts, and timeout are persisted in
+the NHBCAP01-srv properties in mta.yaml.
+
+These accounts are a sandbox test mapping, not an approved production
+Murabaha accounting design.
+
+### Service authorization
+
+User NHB_S4_INT, role Z_NHB_S4_JOURNAL_POST:
+
+S_SERVICE:
+- SRV_TYPE=HS
+- SRV_NAME=765421B024CC2A51F443E3AA550DBF
+- SRV_NAME=F2D6570F4F3FFEC26BC09A5F8A5950
+
+Posting and reversal succeeded after replacing the temporary wildcard
+with these exact values, generating the profile, and comparing users.
+
+### Verified documents
+
+Company code 1710, fiscal year 2026, currency USD, amount 100:
+
+- 0100000060: posted in S/4 after the app's former 10-second timeout;
+  its application event was reconciled from verified SAP evidence.
+- 0100000061: normal posting confirmed and recorded automatically.
+- 0100000062: posting confirmed with restricted service permissions.
+- 0100000063: reversal response recorded as POSTED; FB03 shows entries
+  opposite to 0100000062. SAP document linkage still needs explicit checking.
+
+Original 0100000062:
+- Debit 10010000: 100 USD
+- Credit 12530100: 100 USD
+
+Reversal 0100000063:
+- Credit 10010000: 100 USD
+- Debit 12530100: 100 USD
+
+### Fixes and operational lessons
+
+- SOAP MessageHeader IDs must be no longer than 35 characters.
+  The generator uses NHB plus a UUID with hyphens removed.
+- Both message IDs are validated before sending.
+- A timeout does not prove posting failed. Check S/4 before retrying.
+- Integration Suite COMPLETED does not alone prove business success.
+  Inspect the SOAP confirmation and accounting document.
+- BKPF-USNAM was NHBCAP01 (CreatedByUser), not the authenticated user
+  NHB_S4_INT. Avoid filtering only by the technical login when investigating.
+- The one-time reconciliation endpoint was removed from source;
+  NHB_ENABLE_VERIFIED_REPAIR is absent from the deployed environment.
+- The reconciled document 0100000060 was stored as 100000060 in the app.
+  Its stored document number and composite ID still need normalization.

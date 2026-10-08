@@ -277,7 +277,7 @@ test('marks a pending accounting event POSTED when SAP confirms posting', async 
                 </Log>
             </JournalEntryCreateConfirmation>
         </JournalEntryBulkCreateConfirmation>`
-});
+  });
   try {
     await postPayment(reference, 1000);
 
@@ -618,7 +618,7 @@ test('marks a reversal accounting event POSTED when SAP confirms reversal', asyn
     } else {
       process.env
         .SAP_JOURNAL_ENTRY_PASSWORD =
-        orignalPassword;
+        originalPassword;
     }
   }
 });
