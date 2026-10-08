@@ -847,3 +847,35 @@ No payment ingestion or SAP posting is performed by this function.
 Validation: JavaScript syntax and CDS compilation passed;
 all 59 existing source tests passed; git diff --check was clean.
 The new endpoint was separately verified against Fiserv.
+
+## Customer, account and transaction linkage — verified 9 October 2026
+
+Deployed CAP retrieved customer 2|98310:
+Louise Payne, Individual.
+
+Fiserv Party Account Relationship inquiry returned 24 relationships
+for DDA account 110000000055. This inquiry was verified in Postman;
+it is not yet exposed through a CAP relationship operation.
+
+Verified ownership:
+- 2|98310 — Louise Payne — Owner — PrimaryOwnerInd=true
+- 2|98309 — Thomas Payne — JointTenancy — PrimaryOwnerInd=false
+
+The primary owner matches the account title returned by account details.
+Previously tested customer 2|98314 (Maria Alvarez) was not among the
+relationships returned in this inquiry.
+
+Deployed CAP also retrieved credit transactions for this account:
+- Four USD 2.11 transactions described as Internal Transfer In
+- One USD 10000 transaction described as Account Initial Deposit
+
+The credit query returned the configured maximum of five records.
+Completeness has not been established; cursor continuation is not implemented.
+
+Customer ownership and transaction retrieval are verified.
+No transaction has yet been matched to a Murabaha financing or installment.
+A credit direction or account relationship alone does not establish repayment.
+No transactions from this inquiry were ingested as payments or posted to SAP.
+
+Only the identifiers and relationship evidence needed for this checkpoint
+are documented; the full provider response is not committed.
