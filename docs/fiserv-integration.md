@@ -1102,3 +1102,22 @@ The snapshot audit identified 55 distinct missing payment IDs referenced
 by surviving accounting events or reversals. These losses existed before
 the retirement deployment. Recovery remains outstanding.
 Local validation: 74 CAP tests and 9 Python preview tests passed.
+
+## Fiserv payment recovery — verified 9 October 2026 UTC
+
+Restored the original synthetic certification payment:
+b4a6c7b6-6ec5-444e-b079-58022d150e63, USD 2.11.
+
+Original identity, managed timestamps, and provider audit fields were preserved.
+Existing installment paid amount remained USD 2.11.
+The existing PENDING accounting event was preserved.
+All existing rows were checked unchanged before committing.
+No payment actions, new accounting events, or SAP postings were invoked.
+
+CAP subsequently returned the restored payment.
+The read-only preview recognized its source as ALREADY_ALLOCATED.
+A fresh validated snapshot contained two payments; other collection counts
+were unchanged. Snapshots and recovery reports remain outside the repository.
+
+Recovery remains incomplete: 52 other review candidates, two blocked
+missing payments, and six installment discrepancies remain unresolved.
