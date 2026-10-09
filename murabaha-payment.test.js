@@ -880,3 +880,47 @@ test('Fiserv certification allocation preserves SCO provider reference as audit 
     assert.equal(Number(payment.amount), 2.11);
   });
 });
+
+// Reconstruction metadata is separate from unavailable original payment audit.
+test('ordinary payment does not acquire reconstruction metadata', async () => {
+  const payment = await postPayment('TEST-NORMAL-NOT-RECONSTRUCTED', 1);
+  const row = await paymentById(payment.ID);
+  for (const field of ['recoveryStatus', 'recoveredAt', 'recoveredBy',
+    'recoveryReason', 'recoveryEvidence', 'originalAuditUnavailable', 'sourceAuditUnavailable']) {
+    assert.equal(row[field] ?? null, null);
+  }
+  assert.ok(row.createdAt);
+});
+
+test('reconstruction metadata persists with unknown original audit and unchanged balances and events', async () => {
+  const before = await installment();
+  const eventsBefore = await cds.db.run(cds.ql.SELECT.from('NHBCAP01.MurabahaAccountingEvent'));
+  const paymentId = require('node:crypto').randomUUID();
+  const recoveredAt = '2026-10-10T00:00:00.000Z';
+  const evidence = JSON.stringify({ receiptEventIds: ['synthetic-unit-test-only'] });
+  // Raw, parameterized SQL deliberately preserves explicit null original audits.
+  await cds.db.tx(async tx => {
+    await tx.run(`INSERT INTO "NHBCAP01_MURABAHAPAYMENT"
+      ("ID","FINANCING_ID","INSTALLMENT_ID","EXTERNALPAYMENTID","PAYMENTDATE",
+       "AMOUNT","CURRENCY","STATUS","CREATEDAT","CREATEDBY","MODIFIEDAT","MODIFIEDBY",
+       "RECOVERYSTATUS","RECOVEREDAT","RECOVEREDBY","RECOVERYREASON","RECOVERYEVIDENCE",
+       "ORIGINALAUDITUNAVAILABLE","SOURCEAUDITUNAVAILABLE")
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [paymentId, before.financing_ID, INSTALLMENT_ID, 'TEST-RECONSTRUCTED-METADATA',
+        '2026-09-21', 1, 'USD', 'POSTED', null, null, null, null,
+        'RECONSTRUCTED', recoveredAt, 'offline-test-operator',
+        'Synthetic persistence test; not an actual payment recovery.', evidence, 1, 1]);
+    const row = await tx.run(cds.ql.SELECT.one.from('NHBCAP01.MurabahaPayment').where({ ID: paymentId }));
+    assert.equal(row.recoveryStatus, 'RECONSTRUCTED');
+    assert.equal(new Date(row.recoveredAt).toISOString(), recoveredAt);
+    assert.equal(row.recoveredBy, 'offline-test-operator');
+    assert.equal(row.originalAuditUnavailable, true);
+    assert.equal(row.sourceAuditUnavailable, true);
+    assert.deepEqual(JSON.parse(row.recoveryEvidence), JSON.parse(evidence));
+    for (const field of ['createdAt', 'createdBy', 'modifiedAt', 'modifiedBy']) assert.equal(row[field], null);
+  });
+  assert.deepEqual(await installment(), before);
+  const eventsAfter = await cds.db.run(cds.ql.SELECT.from('NHBCAP01.MurabahaAccountingEvent'));
+  const sort = rows => rows.sort((a, b) => a.ID.localeCompare(b.ID));
+  assert.deepEqual(sort(eventsAfter), sort(eventsBefore));
+});

@@ -1121,3 +1121,31 @@ were unchanged. Snapshots and recovery reports remain outside the repository.
 
 Recovery remains incomplete: 52 other review candidates, two blocked
 missing payments, and six installment discrepancies remain unresolved.
+
+## Payment reconstruction — verified 9 October 2026 UTC
+
+Added nullable recovery metadata to distinguish reconstructed payments
+from records whose original audit information is available.
+
+Reconstructed 52 supported payment records in one HANA transaction:
+47 POSTED and 5 REVERSED. Original IDs and references were retained.
+Unknown original managed and provider audit fields remain null.
+Recovery time, operator, reason and supporting evidence were recorded.
+
+Existing rows, installment balances, reversals, accounting events and
+SAP document identities were verified unchanged before commit.
+No accounting events were created and no SAP postings were invoked.
+Local validation passed: 81 tests across eight suites, including rollback tests.
+
+Post-recovery snapshot: 20261009T230355Z.
+Payment count: 54. No accounting events reference missing payments.
+Two missing payments referenced by reversals remain unsupported.
+Six installment discrepancies remain unresolved.
+
+Removed completed one-time fixture-import removal options after they
+caused a subsequent deployment to fail on already-retired artifacts.
+The corrected deployment preserved existing data. Production fixture
+imports remain excluded; test CSV fixtures and table definitions remain.
+
+Snapshots, transaction backups and recovery receipts are stored outside
+the repository. Complete historical recovery is not established.

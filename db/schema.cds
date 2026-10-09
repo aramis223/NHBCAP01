@@ -88,6 +88,14 @@ entity MurabahaPayment : cuid, managed {
     sourcePostedDateTime  : String(40);
     sourceProviderReference : String(36);
     allocationReason      : String(500);
+    // Reconstruction audit is separate from unavailable original managed/source audit.
+    recoveryStatus          : String(30);
+    recoveredAt             : Timestamp;
+    recoveredBy             : String(255);
+    recoveryReason          : String(1000);
+    recoveryEvidence        : LargeString;
+    originalAuditUnavailable : Boolean;
+    sourceAuditUnavailable   : Boolean;
 }
 
 
