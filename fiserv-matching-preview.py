@@ -127,6 +127,8 @@ def build_preview(get, args):
         comparisons = []
         for financing, installment, outstanding in candidates:
             blockers = []
+            if transaction.get('reversalType') not in (None, ''):
+                blockers.append('REVERSAL_OR_ADJUSTMENT_REQUIRES_REVIEW')
             if payments:
                 blockers.append('SOURCE_TRANSACTION_ALREADY_ALLOCATED')
             if financing['status'] not in ['ACTIVE', 'DEFAULTED']:

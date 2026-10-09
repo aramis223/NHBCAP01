@@ -1328,6 +1328,8 @@ try {
                     return {
                         transactionId: record.AcctTrnKeys?.AcctTrnId,
                         transactionCode: info.TrnCode,
+                        providerReference: info.SPRefIdent ?? null,
+                        reversalType: info.TrnRevType ?? null,
                         direction: info.DrCrType,
                         source: info.TrnSrc,
                         memoPosted: info.MemoPostInd,

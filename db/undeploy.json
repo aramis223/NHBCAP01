@@ -3,5 +3,10 @@
   "src/gen/**/*.hdbindex",
   "src/gen/**/*.hdbconstraint",
   "src/gen/**/*_drafts.hdbtable",
-  "src/gen/**/*.hdbcalculationview"
+  "src/gen/**/*.hdbcalculationview",
+  "src/gen/data/NHBCAP01-MurabahaPayment.hdbtabledata",
+  "src/gen/data/NHBCAP01-Account.hdbtabledata",
+  "src/gen/data/NHBCAP01-Customer.hdbtabledata",
+  "src/gen/data/NHBCAP01-MurabahaInstallment.hdbtabledata",
+  "src/gen/data/NHBCAP01-MurabahaFinancing.hdbtabledata"
 ]

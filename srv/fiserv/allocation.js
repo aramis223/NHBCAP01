@@ -47,6 +47,15 @@ function selectTransaction(data, transactionId, start, end) {
         info.MemoPostInd !== false || record.AcctTrnStatus?.AcctTrnStatusCode !== 'Valid') {
         reject(409, 'Selected transaction must be a Valid, non-memo CORE credit.');
     }
+    // Enum values and linkage semantics are not yet verified. Fail closed
+    // for every populated marker, including whitespace and unknown values.
+    if (info.TrnRevType != null && info.TrnRevType !== '') {
+        reject(409, 'Transactions with a reversal or adjustment marker require review. No allocation made.');
+    }
+    if (info.SPRefIdent != null &&
+        (typeof info.SPRefIdent !== 'string' || info.SPRefIdent.length > 36)) {
+        reject(409, 'Provider reference must be a string of at most 36 characters.');
+    }
     if (!validDateTime(info.PostedDt) ||
         Date.parse(`${info.PostedDt}Z`) < Date.parse(`${start}Z`) ||
         Date.parse(`${info.PostedDt}Z`) > Date.parse(`${end}Z`)) {
@@ -60,7 +69,8 @@ function selectTransaction(data, transactionId, start, end) {
     if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) {
         reject(409, 'Provider currency is missing or invalid.');
     }
-    return { amount: value, currency, postedDateTime: info.PostedDt };
+    return { amount: value, currency, postedDateTime: info.PostedDt,
+        providerReference: info.SPRefIdent ?? null };
 }
 
 function sourceIdentity(environment, orgId, accountId, transactionId) {
@@ -123,6 +133,7 @@ function registerFiservAllocation(service, { db, FinancingDB, PaymentDB, postPay
             sourceOrgId: orgId, sourceAccountId: input.accountId,
             sourceTransactionId: input.transactionId,
             sourcePostedDateTime: selected.postedDateTime,
+            sourceProviderReference: selected.providerReference,
             allocationReason: input.allocationReason
         }).where({ ID: payment.ID }));
         return db.run(cds.ql.SELECT.one.from(PaymentDB).where({ ID: payment.ID }));

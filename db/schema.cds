@@ -86,6 +86,7 @@ entity MurabahaPayment : cuid, managed {
     sourceAccountId       : String(100);
     sourceTransactionId   : String(100);
     sourcePostedDateTime  : String(40);
+    sourceProviderReference : String(36);
     allocationReason      : String(500);
 }
 

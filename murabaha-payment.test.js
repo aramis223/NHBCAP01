@@ -812,3 +812,71 @@ test('Fiserv allocation rejects an anonymous caller', async () => {
     event: 'allocateFiservCertificationTransaction', data: {}
   })), error => Number(error.code || error.statusCode) === 401);
 });
+
+
+test('Fiserv selection rejects every populated reversal marker and validates reference length', () => {
+  const select = info => allocationApi.selectTransaction(
+    { AcctTrnRec: [allocationProviderRecord(info)] }, 'CERT-TRANSACTION-1',
+    '2025-05-12T10:01:01.001', '2025-10-12T10:01:01.001');
+  for (const TrnRevType of ['REVERSAL', 'ADJUSTMENT', 'unknown', ' ', 0, false]) {
+    assert.throws(() => select({ TrnRevType }), error =>
+      error.statusCode === 409 && /reversal or adjustment marker/.test(error.message));
+  }
+  for (const TrnRevType of [undefined, null, '']) {
+    assert.equal(select({ TrnRevType, SPRefIdent: 'SCO-BATCH-TEST' }).providerReference, 'SCO-BATCH-TEST');
+  }
+  assert.equal(select({}).providerReference, null);
+  assert.equal(select({ SPRefIdent: 'x'.repeat(36) }).providerReference.length, 36);
+  for (const SPRefIdent of [123, 'x'.repeat(37)]) {
+    assert.throws(() => select({ SPRefIdent }), /Provider reference/);
+  }
+});
+
+function mockAllocationProvider(info) {
+  global.fetch = async url => new Response(JSON.stringify(
+    url === process.env.FISERV_TOKEN_URL ? { access_token: 'test-token' } : {
+      Status: { StatusCode: '0' }, AcctTrnRec: [allocationProviderRecord(info)]
+    }
+  ), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+test('Fiserv history exposes provider reference and reversal marker without classification', async () => {
+  await withAllocationFixture(async ({ input }) => {
+    mockAllocationProvider({ SPRefIdent: 'SCO-BATCH-TEST', TrnRevType: 'UNKNOWN-MARKER' });
+    const data = await getService().tx({
+      user: new cds.User({ id: 'allocation-test-system', roles: ['system-user'] })
+    }, tx => tx.send({ event: 'getFiservAccountTransactions', data: {
+      accountId: input.accountId, startDateTime: input.startDateTime,
+      endDateTime: input.endDateTime, direction: 'Credit'
+    } }));
+    assert.equal(data.transactions[0].providerReference, 'SCO-BATCH-TEST');
+    assert.equal(data.transactions[0].reversalType, 'UNKNOWN-MARKER');
+  });
+});
+
+test('Fiserv reversal or adjustment markers create no payment, event or balance change', async () => {
+  await withAllocationFixture(async ({ allocate, db, entities }) => {
+    const paymentCount = (await db.run(cds.ql.SELECT.from(entities.MurabahaPayment))).length;
+    const eventCount = (await db.run(cds.ql.SELECT.from(entities.MurabahaAccountingEvent))).length;
+    const before = await installment();
+    for (const TrnRevType of ['REVERSAL', 'ADJUSTMENT', 'unknown', ' ']) {
+      mockAllocationProvider({ TrnRevType });
+      await assert.rejects(() => allocate(), /reversal or adjustment marker/);
+    }
+    assert.equal((await db.run(cds.ql.SELECT.from(entities.MurabahaPayment))).length, paymentCount);
+    assert.equal((await db.run(cds.ql.SELECT.from(entities.MurabahaAccountingEvent))).length, eventCount);
+    const after = await installment();
+    assert.equal(Number(after.paidAmount), Number(before.paidAmount));
+    assert.equal(after.status, before.status);
+  });
+});
+
+test('Fiserv certification allocation preserves SCO provider reference as audit evidence', async () => {
+  await withAllocationFixture(async ({ allocate }) => {
+    mockAllocationProvider({ SPRefIdent: 'SCO-BATCH-TEST', TrnRevType: '' });
+    const payment = await allocate();
+    assert.equal(payment.sourceProviderReference, 'SCO-BATCH-TEST');
+    assert.equal(payment.sourceTransactionId, 'CERT-TRANSACTION-1');
+    assert.equal(Number(payment.amount), 2.11);
+  });
+});

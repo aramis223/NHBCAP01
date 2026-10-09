@@ -119,6 +119,29 @@ class PreviewTests(unittest.TestCase):
         self.assertIn('AMOUNT_OUTSIDE_INSTALLMENT_BALANCE', third['candidates'][0]['blockers'])
         self.assertTrue(all('allocateFiserv' not in path and 'postAccounting' not in path for path in requests))
 
+
+    def test_populated_reversal_marker_blocks_preview_candidate(self):
+        def get(path):
+            if path.startswith('getFiserv'):
+                data = page(['test-reversal'])
+                data['transactions'][0]['reversalType'] = 'UNKNOWN-MARKER'
+                data['transactions'][0]['providerReference'] = 'SCO-BATCH-TEST'
+                return data
+            if path.startswith('MurabahaFinancing'):
+                return {'value': [dict(ID='fin', contractReference='MUR-FISERV-CERT-fin',
+                    status='ACTIVE', currency='USD')]}
+            if path.startswith('MurabahaInstallment'):
+                return {'value': [dict(ID='inst', dueDate='2026-05-16', installmentAmount='2200.00',
+                    paidAmount='0.00', status='PENDING')]}
+            if path.startswith('MurabahaPayment'):
+                return {'value': []}
+            self.fail('Unexpected read')
+        result = preview.build_preview(get, arguments())
+        row = result['preview'][0]
+        self.assertEqual(row['transaction']['providerReference'], 'SCO-BATCH-TEST')
+        self.assertIn('REVERSAL_OR_ADJUSTMENT_REQUIRES_REVIEW', row['candidates'][0]['blockers'])
+        self.assertEqual(row['candidates'][0]['decision'], 'BLOCKED_FOR_THIS_CANDIDATE')
+
     def test_invalid_money_stops(self):
         for amount in [None, 'NaN', 'Infinity', 'bad']:
             with self.assertRaises(preview.PreviewError):

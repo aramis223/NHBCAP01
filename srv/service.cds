@@ -97,6 +97,8 @@ service NHBCAP01Service {
     type FiservTransaction {
         transactionId : String;
         transactionCode : String;
+        providerReference : String(36);
+        reversalType : String;
         direction : String;
         source : String;
         memoPosted : Boolean;

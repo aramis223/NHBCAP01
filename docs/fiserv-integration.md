@@ -1041,3 +1041,64 @@ Live preview verified on 9 October 2026:
   installment outstanding amount of USD 2197.89.
 - Eight offline preview tests passed.
 The preview performed reads only; no payment or SAP posting was created.
+
+
+## Provider references and reversal markers
+
+Fiserv's supplied transaction response documentation describes SPRefIdent
+as a unique service provider transaction reference, maximum 36 characters,
+and notes that FNX supplies an SCO batch reference ID. It does not establish
+a financing or installment reference. AcctTrnId remains our source identity;
+SPRefIdent is exposed as providerReference and retained on new allocated
+payments as sourceProviderReference when returned. Existing payment rows
+are not backfilled. No uniqueness constraint is placed on this batch reference.
+
+The supplied documentation describes TrnRevType as a reversal or adjustment
+classification for posted transactions. Allowed values and original-transaction
+linkage have not been verified. The history response preserves it as reversalType.
+Certification allocation rejects any populated TrnRevType with HTTP 409,
+including unknown or whitespace values. The read-only preview blocks candidates
+with a populated reversalType. No automatic reversal is performed.
+
+Missing, null or empty markers do not prove repayment purpose; existing
+certification confirmation and all other allocation checks still apply.
+Live certification examples examined so far omitted both fields.
+
+
+## Retiring deployed fixture imports — October 2026
+
+A previously verified Fiserv payment could no longer be read after deployment,
+while its accounting event and USD 2.11 installment paid balance remained.
+The generated payment import had include_filter=[], an unrestricted import.
+This is consistent with fixture reimport replacing payment rows, but deployment
+logs have not yet been used to establish the exact operation that removed it.
+
+Preparation moves the five NHBCAP01 fixture CSVs from db/data to test/data.
+The deployer start command explicitly retires their old hdbtabledata artifacts
+with skip_data_deletion=true per artifact. db/undeploy.json lists the exact five
+imports; no table is scheduled for undeployment. The production build must not
+contain any of these five CSV/import artifacts. No other data import is retired.
+
+Capture all seven CAP collections before deployment and compare afterwards,
+with other application writes paused during the check. API snapshots are not
+transactional database backups. Keep them outside the repository.
+The migration preserves remaining rows; it does not recover missing payments.
+Do not replay a missing payment while its balance and accounting event survive.
+
+After the controlled migration is verified, retire its temporary command-line
+flags in a separate reviewed change. Fixture CSVs remain test-only permanently.
+References:
+https://cap.cloud.sap/docs/guides/databases/initial-data
+https://cap.cloud.sap/docs/guides/databases/hana#csv-data-gets-overridden
+https://community.sap.com/t5/technology-blog-posts-by-sap/handling-csv-data-deployment-in-cap-hdi-without-data-loss/ba-p/14118322
+
+Import-retirement deployment verification:
+Operation ID: 57aeaa23-c423-11f1-b348-eeee0a88e060.
+All seven collections matched the snapshot before and after deployment:
+4 customers, 4 accounts, 39 financings, 51 installments, 1 payment,
+7 reversals and 58 accounting events.
+
+The snapshot audit identified 55 distinct missing payment IDs referenced
+by surviving accounting events or reversals. These losses existed before
+the retirement deployment. Recovery remains outstanding.
+Local validation: 74 CAP tests and 9 Python preview tests passed.
