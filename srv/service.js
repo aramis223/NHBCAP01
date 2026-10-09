@@ -817,6 +817,21 @@ module.exports = cds.service.impl(async function () {
             : 'PARTIALLY_PAID';
         const paymentId = cds.utils.uuid();
 
+        // Reserve this balance version before creating the payment and event.
+        // A rejected request rolls this update back with the request transaction.
+        const changed = await tx.run(
+            UPDATE(InstallmentDB)
+                .set({ paidAmount: newPaidAmount, status: newInstallmentStatus })
+                .where({
+                    ID: installmentId,
+                    paidAmount: installment.paidAmount,
+                    status: installment.status
+                })
+        );
+        if (changed !== 1) {
+            return req.reject(409, 'Installment changed during payment processing. Refresh and retry.');
+        }
+
         await tx.run(
             INSERT.into(PaymentDB).entries({
                 ID: paymentId,
@@ -845,11 +860,7 @@ module.exports = cds.service.impl(async function () {
             })
         );
 
-        await tx.run(
-            UPDATE(InstallmentDB)
-                .set({ paidAmount: newPaidAmount, status: newInstallmentStatus })
-                .where({ ID: installmentId })
-        );
+
 
         const installments = await tx.run(
             SELECT.from(InstallmentDB)

@@ -117,3 +117,5 @@ entity MurabahaAccountingEvent : cuid, managed {
 
 annotate MurabahaAccountingEvent
 with @assert.unique.paymentEventType: [ payment, eventType ];
+
+annotate MurabahaPayment with @assert.unique.externalPaymentReference: [ externalPaymentId ];

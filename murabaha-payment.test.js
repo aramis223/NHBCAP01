@@ -622,3 +622,61 @@ test('marks a reversal accounting event POSTED when SAP confirms reversal', asyn
     }
   }
 });
+
+test('database rejects a duplicate external payment reference', async () => {
+  const reference = 'TEST-DB-UNIQUE-001';
+  const payment = await postPayment(reference, 100);
+  const db = await cds.connect.to('db');
+  const { MurabahaPayment } = cds.entities('NHBCAP01');
+  await assert.rejects(() => db.tx(async tx => {
+    await tx.run(cds.ql.INSERT.into(MurabahaPayment).entries({
+      ID: cds.utils.uuid(),
+      financing_ID: payment.financing_ID,
+      installment_ID: payment.installment_ID,
+      externalPaymentId: reference,
+      paymentDate: payment.paymentDate,
+      amount: 100,
+      currency: 'USD',
+      status: 'POSTED'
+    }));
+  }));
+  assert.equal((await paymentsWithReference(reference)).length, 1);
+  assert.equal(Number((await installment()).paidAmount), 100);
+});
+
+test('competing submissions of one reference create one payment and event', async () => {
+  const reference = 'TEST-CONCURRENT-SAME-001';
+  const results = await Promise.allSettled([
+    postPayment(reference, 100), postPayment(reference, 100)
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const payments = await paymentsWithReference(reference);
+  assert.equal(payments.length, 1);
+  assert.equal(Number((await installment()).paidAmount), 100);
+  const service = getService();
+  const events = await service.run(cds.ql.SELECT.from(
+    service.entities.MurabahaAccountingEvent
+  ).where({ payment_ID: payments[0].ID, eventType: 'PAYMENT_RECEIVED' }));
+  assert.equal(events.length, 1);
+});
+
+test('competing distinct payments do not lose successful balance updates', async () => {
+  const references = ['TEST-CONCURRENT-A-001', 'TEST-CONCURRENT-B-001'];
+  const amounts = [100, 200];
+  const results = await Promise.allSettled(references.map(
+    (reference, index) => postPayment(reference, amounts[index])
+  ));
+  const successful = results.filter(result => result.status === 'fulfilled');
+  assert.ok(successful.length >= 1, 'At least one payment should succeed');
+  let expected = 0;
+  for (let index = 0; index < references.length; index++) {
+    const payments = await paymentsWithReference(references[index]);
+    if (results[index].status === 'fulfilled') {
+      expected += amounts[index];
+      assert.equal(payments.length, 1);
+    } else {
+      assert.equal(payments.length, 0, 'Rejected request must not leave a payment');
+    }
+  }
+  assert.equal(Number((await installment()).paidAmount), expected);
+});
