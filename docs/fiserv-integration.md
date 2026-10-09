@@ -1007,3 +1007,37 @@ Deployed CAP verification completed on 9 October 2026:
   and hasMore=false.
 - Local validation passed: 70 tests across seven suites.
 These checks were read-only; no allocation or SAP posting was requested.
+
+
+## Read-only matching preview with pagination and allocation audit
+
+The preview follows all cursor pages for the existing filtered CORE Credit
+query, using page size 2 by default. It stops without a complete report if
+a cursor loops, transaction IDs repeat, metadata is missing, or the page
+limit is reached. CAP collection continuation links are followed within
+the configured service.
+
+For each transaction, the preview derives the same FISERV source key as
+the allocation action from environment, organization, account and transaction
+ID. Existing payments with that key are flagged ALREADY_ALLOCATED and all
+candidate allocations are blocked, including when the existing payment is
+REVERSED. NOT_FOUND_IN_CAP does not establish repayment eligibility.
+
+Certification environment and organization default to the verified values
+and are displayed in allocationAuditScope. They must match the CAP runtime.
+This audit covers deterministic source references recorded by our allocation
+action; it does not prove absence of legacy payments with other references.
+
+The preview only sends GET requests. It does not create payments or SAP
+postings. It does not extend the allocation action's five-record lookup.
+Read results are not a snapshot and the allocation action must revalidate.
+Offline tests: python3 -B -m unittest discover -s test -p fiserv_matching_preview_test.py
+
+Live preview verified on 9 October 2026:
+- Three cursor pages returned five distinct transactions.
+- One previously allocated transaction was identified and blocked.
+- Three unallocated USD 2.11 credits remained REVIEW_REQUIRED.
+- The USD 10000 initial deposit was blocked for exceeding the
+  installment outstanding amount of USD 2197.89.
+- Eight offline preview tests passed.
+The preview performed reads only; no payment or SAP posting was created.
