@@ -3,7 +3,7 @@ require('dotenv').config();
 const cds = require('@sap/cds');
 const { getPartyList, getParty } = require('./fiserv/parties');
 const { getAccountDetails } = require('./fiserv/accounts');
-const { getAccountTransactions } = require('./fiserv/transactions');
+const { getAccountTransactions, normalizeTransactionPagination } = require('./fiserv/transactions');
 const {
     postJournalEntry,
     postJournalEntryReversal
@@ -1288,12 +1288,18 @@ try {
         }
     });
     this.on('getFiservAccountTransactions', async req => {
-        const { accountId, startDateTime, endDateTime, direction } = req.data;
+        const { accountId, startDateTime, endDateTime, direction, cursor, pageSize } = req.data;
         if (!accountId || !startDateTime || !endDateTime) {
             return req.reject(400, 'accountId, startDateTime and endDateTime are required.');
         }
         if (!['Debit', 'Credit'].includes(direction)) {
             return req.reject(400, 'direction must be Debit or Credit.');
+        }
+        let pagination;
+        try {
+            pagination = normalizeTransactionPagination({ cursor, pageSize });
+        } catch (error) {
+            return req.reject(400, error.message);
         }
         // Provider date-times have no timezone; preserve that contract.
         const datePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?$/;
@@ -1311,10 +1317,12 @@ try {
         try {
             const data = await getAccountTransactions(
                 accountId, process.env.FISERV_ORG_ID,
-                { startDateTime, endDateTime, direction }
+                { startDateTime, endDateTime, direction, ...pagination }
             );
             return {
                 accountId,
+                nextCursor: data.RecCtrlOut?.Cursor || null,
+                hasMore: Boolean(data.RecCtrlOut?.Cursor),
                 transactions: (data.AcctTrnRec || []).map(record => {
                     const info = record.AcctTrnInfo || {};
                     return {

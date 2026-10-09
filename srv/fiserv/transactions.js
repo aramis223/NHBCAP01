@@ -4,10 +4,25 @@ const crypto = require('crypto');
 const { fetchWithTimeout } = require('../integration/http');
 const { getAccessToken } = require('./auth');
 
+function normalizeTransactionPagination({ cursor, pageSize } = {}) {
+    cursor = cursor ?? '';
+    pageSize = pageSize ?? 5;
+    if (typeof cursor !== 'string' || cursor.length > 4096 || /[\x00-\x1f\x7f]/.test(cursor)) {
+        throw new Error('cursor must be a string without control characters, at most 4096 characters.');
+    }
+    // Conservative application limit; this is not a claimed provider maximum.
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 5) {
+        throw new Error('pageSize must be an integer from 1 to 5.');
+    }
+    return { cursor, pageSize };
+}
+
 async function getAccountTransactions(accountId, orgId, {
     startDateTime,
     endDateTime,
-    direction = 'Debit'
+    direction = 'Debit',
+    cursor,
+    pageSize
 }) {
     const baseUrl = process.env.FISERV_API_BASE_URL;
 
@@ -22,6 +37,8 @@ async function getAccountTransactions(accountId, orgId, {
     if (!['Debit', 'Credit'].includes(direction)) {
         throw new Error('Transaction direction must be Debit or Credit');
     }
+
+    const pagination = normalizeTransactionPagination({ cursor, pageSize });
 
     const accessToken = await getAccessToken();
 
@@ -40,8 +57,8 @@ async function getAccountTransactions(accountId, orgId, {
             },
             body: JSON.stringify({
                 RecCtrlIn: {
-                    MaxRecLimit: '5',
-                    Cursor: ''
+                    MaxRecLimit: String(pagination.pageSize),
+                    Cursor: pagination.cursor
                 },
                 AcctTrnSel: {
                     DrCrType: direction,
@@ -86,4 +103,4 @@ async function getAccountTransactions(accountId, orgId, {
     return data;
 }
 
-module.exports = { getAccountTransactions };
+module.exports = { getAccountTransactions, normalizeTransactionPagination };

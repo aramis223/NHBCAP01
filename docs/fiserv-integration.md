@@ -977,3 +977,33 @@ Setting the exact certification URL and restarting CAP resolved the issue.
 Scope remains certification-only, with explicit synthetic confirmation
 and a limited transaction-history query; automatic repayment classification
 and complete-history ingestion are not established.
+
+
+## Transaction cursor pagination — certification observation, 9 October 2026
+
+Postman requests for account 110000000055, Credit, CORE, amount 1–20000,
+and date range 2025-05-12T10:01:01.001 to 2025-10-12T10:01:01.001 used
+MaxRecLimit 2. Three successive pages returned 2, 2, and 1 records,
+with five distinct transaction IDs. The first two responses supplied
+RecCtrlOut.Cursor; the last omitted it. Each continuation copied the
+opaque cursor unchanged into RecCtrlIn.Cursor with identical filters.
+
+CAP exposes optional cursor and pageSize inputs on
+getFiservAccountTransactions. Defaults remain empty cursor and five records.
+The application accepts page sizes 1–5 as a conservative local limit.
+The response includes nextCursor (null when absent) and hasMore.
+Each invocation retrieves one page; clients explicitly request continuation.
+No cursor is constructed from transaction IDs or dates.
+
+Allocation retains its original five-record query. Pagination does not
+remove the CORE, direction, date, or amount filters, establish unfiltered
+history completeness, or classify transfers as financing repayments.
+
+Deployed CAP verification completed on 9 October 2026:
+- pageSize=2 returned three pages containing 2, 2, and 1 records.
+- Five distinct transaction IDs were observed, without page overlap.
+- Pages 1 and 2 returned nextCursor and hasMore=true.
+- Page 3 returned the USD 10000 initial deposit, nextCursor=null,
+  and hasMore=false.
+- Local validation passed: 70 tests across seven suites.
+These checks were read-only; no allocation or SAP posting was requested.

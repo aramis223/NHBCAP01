@@ -110,6 +110,8 @@ service NHBCAP01Service {
 
     type FiservTransactionPage {
         accountId : String;
+        nextCursor : String;
+        hasMore : Boolean;
         transactions : many FiservTransaction;
     }
 
@@ -117,7 +119,9 @@ service NHBCAP01Service {
         accountId : String,
         startDateTime : String,
         endDateTime : String,
-        direction : String
+        direction : String,
+        cursor : String,
+        pageSize : Integer
     ) returns FiservTransactionPage;
 
     // Explicit allocation to a synthetic certification financing only.
