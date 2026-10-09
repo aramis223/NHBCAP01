@@ -914,3 +914,31 @@ with no cursor continuation. All candidates require explicit review.
 
 Next milestone: define explicit allocation, source transaction identity,
 duplicate protection and audit evidence before implementing payment ingestion.
+
+## Payment protection on HANA — verified 9 October 2026
+
+Implementation commit: 0b8653f. Local validation: 62 tests passed.
+Stored payment-reference duplicate audit was clean before deployment.
+
+Synthetic financing: a0936c14-af6e-4ede-a89c-f13257947f9b
+Installment: bf614ee4-e39f-40f6-9e31-d023db19e933
+Initial paid amount: USD 100.
+
+Concurrent submissions using HANA-DUP-a0936c14:
+- One USD 100 payment accepted; one rejected with HTTP 409.
+- Exactly one payment and one PENDING accounting event persisted.
+- Paid amount became USD 200.
+
+Concurrent distinct references:
+- HANA-DIFF-A-a0936c14: USD 100 accepted.
+- HANA-DIFF-B-a0936c14: USD 200 rejected with HTTP 409:
+  "Installment changed during payment processing. Refresh and retry."
+- Paid amount became USD 300.
+- Rejected reference had zero payments and zero accounting events.
+
+Retrying HANA-DIFF-B-a0936c14 succeeded with HTTP 200.
+Final paid amount: USD 500; installment remained PARTIALLY_PAID.
+
+These tests verify observed duplicate rejection and optimistic balance
+conflict handling on HANA. They do not exhaust all concurrency scenarios.
+No postAccountingEvent action was invoked during these checks.
