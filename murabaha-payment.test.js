@@ -680,3 +680,135 @@ test('competing distinct payments do not lose successful balance updates', async
   }
   assert.equal(Number((await installment()).paidAmount), expected);
 });
+
+const allocationApi = require('./srv/fiserv/allocation');
+
+function allocationProviderRecord(overrides = {}) {
+  return {
+    AcctTrnKeys: { AcctTrnId: 'CERT-TRANSACTION-1' },
+    AcctTrnInfo: {
+      DrCrType: 'Credit', TrnSrc: 'CORE', MemoPostInd: false,
+      PostedDt: '2025-06-09T13:06:00.229',
+      TrnAmt: { Amt: 2.11, CurCode: { CurCodeValue: 'USD' } },
+      ...overrides
+    },
+    AcctTrnStatus: { AcctTrnStatusCode: 'Valid' }
+  };
+}
+
+test('allocation refuses missing, duplicate and non-posted source transactions', () => {
+  const select = records => allocationApi.selectTransaction(
+    { AcctTrnRec: records }, 'CERT-TRANSACTION-1',
+    '2025-05-12T10:01:01.001', '2025-10-12T10:01:01.001'
+  );
+  assert.throws(() => select([]), /not uniquely found/);
+  assert.throws(() => select([allocationProviderRecord(), allocationProviderRecord()]), /not uniquely found/);
+  assert.throws(() => select([allocationProviderRecord({ DrCrType: 'Debit' })]), /CORE credit/);
+  assert.throws(() => select([allocationProviderRecord({ MemoPostInd: true })]), /CORE credit/);
+  assert.throws(() => select([allocationProviderRecord({ PostedDt: '2025-02-30T00:00:00' })]), /posting date/);
+});
+
+test('allocation identity includes provider environment, org, account and transaction', () => {
+  const identity = allocationApi.sourceIdentity('cert', 'org', 'account', 'transaction');
+  assert.equal(identity.length, 71);
+  assert.equal(identity, allocationApi.sourceIdentity('cert', 'org', 'account', 'transaction'));
+  assert.notEqual(identity, allocationApi.sourceIdentity('cert', 'org', 'other-account', 'transaction'));
+  assert.notEqual(identity, allocationApi.sourceIdentity('other', 'org', 'account', 'transaction'));
+  assert.notEqual(identity, allocationApi.sourceIdentity('cert', 'other-org', 'account', 'transaction'));
+});
+
+async function withAllocationFixture(work) {
+  const names = ['FISERV_API_BASE_URL', 'FISERV_ORG_ID', 'FISERV_TOKEN_URL', 'FISERV_API_KEY', 'FISERV_API_SECRET'];
+  const original = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  const originalFetch = global.fetch;
+  const db = await cds.connect.to('db');
+  const entities = cds.entities('NHBCAP01');
+  const current = await installment();
+  const originalFinancing = await db.run(cds.ql.SELECT.one.from(entities.MurabahaFinancing)
+    .where({ ID: current.financing_ID }));
+  try {
+    Object.assign(process.env, {
+      FISERV_API_BASE_URL: 'https://bankinghub-cert.fiservapis.com/banking/efx/v1',
+      FISERV_ORG_ID: 'TEST-ORG', FISERV_TOKEN_URL: 'https://example.invalid/token',
+      FISERV_API_KEY: 'test-key', FISERV_API_SECRET: 'test-secret'
+    });
+    await db.run(cds.ql.UPDATE(entities.MurabahaFinancing).set({
+      contractReference: 'MUR-FISERV-CERT-AUTO', finxactAccountId: 'TEST-ACCOUNT'
+    }).where({ ID: current.financing_ID }));
+    global.fetch = async url => new Response(JSON.stringify(
+      url === process.env.FISERV_TOKEN_URL ? { access_token: 'test-token' } : {
+        Status: { StatusCode: '0' }, AcctTrnRec: [allocationProviderRecord()]
+      }
+    ), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const input = {
+      financingId: current.financing_ID, installmentId: INSTALLMENT_ID,
+      accountId: 'TEST-ACCOUNT', transactionId: 'CERT-TRANSACTION-1',
+      startDateTime: '2025-05-12T10:01:01.001', endDateTime: '2025-10-12T10:01:01.001',
+      allocationReason: 'Synthetic automated certification allocation',
+      confirmSyntheticAllocation: true
+    };
+    const allocate = changes => getService().tx({
+      user: new cds.User({ id: 'allocation-test-system', roles: ['system-user'] })
+    }, tx => tx.send({
+      event: 'allocateFiservCertificationTransaction', data: { ...input, ...changes }
+    }));
+    await work({ allocate, input, db, entities });
+  } finally {
+    global.fetch = originalFetch;
+    for (const name of names) {
+      if (original[name] === undefined) delete process.env[name];
+      else process.env[name] = original[name];
+    }
+    await db.run(cds.ql.UPDATE(entities.MurabahaFinancing).set({
+      contractReference: originalFinancing.contractReference,
+      finxactAccountId: originalFinancing.finxactAccountId
+    }).where({ ID: current.financing_ID }));
+  }
+}
+
+test('explicit Fiserv allocation stores provider evidence and one pending event', async () => {
+  await withAllocationFixture(async ({ allocate }) => {
+    const payment = await allocate();
+    assert.equal(Number(payment.amount), 2.11);
+    assert.equal(payment.currency, 'USD');
+    assert.equal(payment.paymentDate, '2025-06-09');
+    assert.equal(payment.sourceTransactionId, 'CERT-TRANSACTION-1');
+    assert.equal(payment.sourceOrgId, 'TEST-ORG');
+    assert.equal(payment.sourceAccountId, 'TEST-ACCOUNT');
+    assert.equal(payment.allocationReason, 'Synthetic automated certification allocation');
+    assert.equal(Number((await installment()).paidAmount), 2.11);
+    const events = await getService().run(cds.ql.SELECT.from(
+      getService().entities.MurabahaAccountingEvent
+    ).where({ payment_ID: payment.ID }));
+    assert.equal(events.length, 1);
+    assert.equal(events[0].postingStatus, 'PENDING');
+    await assert.rejects(() => allocate(), /already been allocated/);
+    assert.equal(Number((await installment()).paidAmount), 2.11);
+  });
+});
+
+test('Fiserv allocation rejects unconfirmed or mismatched account selections', async () => {
+  await withAllocationFixture(async ({ allocate }) => {
+    await assert.rejects(() => allocate({ confirmSyntheticAllocation: false }), /confirmation/);
+    await assert.rejects(() => allocate({ accountId: 'OTHER-ACCOUNT' }), /linked to the selected account/);
+    assert.equal(Number((await installment()).paidAmount), 0);
+  });
+});
+
+test('Fiserv allocation rejects an unknown transaction without creating a payment', async () => {
+  await withAllocationFixture(async ({ allocate, db, entities }) => {
+    const before = await db.run(cds.ql.SELECT.from(entities.MurabahaPayment));
+    await assert.rejects(() => allocate({ transactionId: 'MISSING' }), /not uniquely found/);
+    const after = await db.run(cds.ql.SELECT.from(entities.MurabahaPayment));
+    assert.equal(after.length, before.length);
+    assert.equal(Number((await installment()).paidAmount), 0);
+  });
+});
+
+test('Fiserv allocation rejects an anonymous caller', async () => {
+  await assert.rejects(() => getService().tx({
+    user: new cds.User.Anonymous()
+  }, tx => tx.send({
+    event: 'allocateFiservCertificationTransaction', data: {}
+  })), error => Number(error.code || error.statusCode) === 401);
+});

@@ -120,6 +120,19 @@ service NHBCAP01Service {
         direction : String
     ) returns FiservTransactionPage;
 
+    // Explicit allocation to a synthetic certification financing only.
+    @requires: 'system-user'
+    action allocateFiservCertificationTransaction(
+        financingId : UUID,
+        installmentId : UUID,
+        accountId : String,
+        transactionId : String,
+        startDateTime : String,
+        endDateTime : String,
+        allocationReason : String(500),
+        confirmSyntheticAllocation : Boolean
+    ) returns MurabahaPayment;
+
     action postMurabahaPayment(
         financingId      : UUID,
         installmentId    : UUID,

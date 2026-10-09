@@ -80,6 +80,13 @@ entity MurabahaPayment : cuid, managed {
     amount            : Decimal(15,2) not null;
     currency          : String(3) default 'USD';
     status            : String(30) default 'RECEIVED';
+    sourceProvider        : String(30);
+    sourceEnvironment     : String(500);
+    sourceOrgId           : String(100);
+    sourceAccountId       : String(100);
+    sourceTransactionId   : String(100);
+    sourcePostedDateTime  : String(40);
+    allocationReason      : String(500);
 }
 
 

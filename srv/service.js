@@ -879,6 +879,10 @@ module.exports = cds.service.impl(async function () {
         return tx.run(SELECT.one.from(PaymentDB).where({ ID: paymentId }));
     };
 
+    require('./fiserv/allocation').registerFiservAllocation(this, {
+        db, FinancingDB, PaymentDB, postPayment
+    });
+
     this.on('postMurabahaPayment', req =>
         postPayment(req, req.data.financingId, req.data.installmentId, req.data)
     );

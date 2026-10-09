@@ -942,3 +942,38 @@ Final paid amount: USD 500; installment remained PARTIALLY_PAID.
 These tests verify observed duplicate rejection and optimistic balance
 conflict handling on HANA. They do not exhaust all concurrency scenarios.
 No postAccountingEvent action was invoked during these checks.
+
+## Fiserv certification allocation — verified 9 October 2026
+
+Local validation: 68 tests passed across six suites.
+
+A Fiserv certification credit was explicitly allocated to a synthetic
+financing installment. This does not establish a real financing repayment.
+
+Source account: 110000000055
+Source transaction: 53SWeKZRHsGoRjibWoKPEYQI
+Source posted datetime: 2025-06-09T13:06:00.229
+Amount: USD 2.11
+
+Financing: 6579b3a2-37a7-4dbb-bcea-a083b906c10a
+Installment: 703133a9-c2d0-4cb6-be75-d144b3b8af0e
+CAP payment: b4a6c7b6-6ec5-444e-b079-58022d150e63
+Accounting event: 1cdb4ebd-b67f-4776-b2a2-a3b8afd84ccc
+
+The payment preserved provider, environment, organization, account,
+transaction identity, posted datetime, and explicit allocation reason.
+Installment paid amount changed from USD 0.00 to USD 2.11.
+Installment status became PARTIALLY_PAID.
+One PAYMENT_RECEIVED accounting event was observed with status PENDING
+and no external SAP document identity. No SAP posting was requested.
+
+Repeating the allocation returned HTTP 409:
+"This Fiserv source transaction has already been allocated."
+The installment paid amount remained USD 2.11 after rejection.
+
+The initial certification-environment check rejected the deployed base URL.
+Setting the exact certification URL and restarting CAP resolved the issue.
+
+Scope remains certification-only, with explicit synthetic confirmation
+and a limited transaction-history query; automatic repayment classification
+and complete-history ingestion are not established.
