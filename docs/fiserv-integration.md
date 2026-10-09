@@ -879,3 +879,38 @@ No transactions from this inquiry were ingested as payments or posted to SAP.
 
 Only the identifiers and relationship evidence needed for this checkpoint
 are documented; the full provider response is not committed.
+
+## Read-only matching preview — verified 9 October 2026
+
+Created a separate synthetic certification fixture:
+- CAP customer: c7a8ff9f-91e6-494d-841a-45c3b8e3001a
+- Fiserv PartyId / provisional CustomerNumber: 2|98310
+- Account: 110000000055
+- Financing: 6579b3a2-37a7-4dbb-bcea-a083b906c10a
+- Contract: MUR-FISERV-CERT-6579b3a2
+- Installment: 703133a9-c2d0-4cb6-be75-d144b3b8af0e
+- Financing status: ACTIVE
+- Installment status: PENDING
+- Outstanding: USD 2200.00; paid amount: 0.00
+
+The financing and lifecycle evidence are synthetic, not a real Louise Payne
+contract. Existing Ahmad Trading regression fixtures remain intact.
+
+fiserv-matching-fixture.sh creates a fresh fixture on each run.
+Do not rerun to retrieve the existing fixture.
+
+fiserv-matching-preview.py performs read-only CAP requests.
+Verified output:
+- One account-linked financing candidate.
+- Four USD 2.11 credits marked REVIEW_REQUIRED.
+- USD 10000 initial deposit blocked for this installment because its amount
+  exceeds the outstanding balance.
+- No payment creation, balance changes or SAP posting.
+
+The preview is a standalone script, not a deployed CAP matching operation.
+It does not verify prior ingestion, repayment purpose or allocation policy.
+Transaction coverage remains limited to five CORE credits, amount 1–20000,
+with no cursor continuation. All candidates require explicit review.
+
+Next milestone: define explicit allocation, source transaction identity,
+duplicate protection and audit evidence before implementing payment ingestion.
