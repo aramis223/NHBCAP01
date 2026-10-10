@@ -1149,3 +1149,24 @@ imports remain excluded; test CSV fixtures and table definitions remain.
 
 Snapshots, transaction backups and recovery receipts are stored outside
 the repository. Complete historical recovery is not established.
+
+## Legacy servicing fixtures — reviewed 10 October 2026
+
+Git history confirms that commit dcc9318 introduced the accounting-event
+entity and PAYMENT_RECEIVED/PAYMENT_REVERSED event creation.
+The earlier servicing implementation did not create these events.
+Commit time alone does not establish the deployed version of each run.
+
+The historical servicing sequence remained unchanged:
+- First installment: 400 reversed, followed by 100 and 1000; net 1100.
+- Second installment: 500 followed by 600; net 1100.
+
+This sequence is consistent with the two settled synthetic fixtures.
+Two ACTIVE fixtures with paidAmount 400 are consistent with interrupted
+runs, but their stopping points have not been independently established.
+
+Two missing payments referenced by reversals and six installment
+reconciliation exceptions remain unresolved. Absent events alone do not
+prove event deletion for fixtures predating accounting-event support.
+No additional payments or historical events were fabricated.
+Existing balances, reversals and SAP references remain unchanged.
