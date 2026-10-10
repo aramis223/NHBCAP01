@@ -1170,3 +1170,22 @@ reconciliation exceptions remain unresolved. Absent events alone do not
 prove event deletion for fixtures predating accounting-event support.
 No additional payments or historical events were fabricated.
 Existing balances, reversals and SAP references remain unchanged.
+
+## Dependency patch deployment — verified 10 October 2026 UTC
+
+Source commit: 614f5a1.
+Updated proxy-addr and brace-expansion dependencies.
+Validation rerun passed: 81 tests across eight suites.
+An earlier test failure did not recur; its cause remains undetermined.
+
+Production build and fixture-import retirement verification passed.
+Deployment operation fb3b4ccf-c4b8-11f1-804f-eeee0a99f884 finished successfully.
+CAP started and became available.
+
+Comparison against snapshot 20261010T144336Z verified all seven
+collections unchanged, including 54 payments and 58 accounting events.
+
+Generated production audits still report four high findings in the
+node-forge dependency chain and three high findings in the deployer's
+braces dependency chain. These remain open; no forced SAP dependency
+downgrades were applied.
