@@ -24,3 +24,7 @@ env/
 .gen/.env
 .env
 .gen/
+
+# Python-generated files
+__pycache__/
+*.pyc
