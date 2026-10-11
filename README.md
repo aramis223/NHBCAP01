@@ -24,7 +24,7 @@ The project combines enterprise architecture modeling, banking domain design, SA
 
 The principal banking demonstration scenario is **Sharia-compliant Murabaha financing**, supported by customer/account integration and SAP accounting integration patterns.
 
-The project is intentionally developed as a learning and portfolio environment rather than presented as a production banking platform. The current phase is portfolio packaging and polish.
+The project is intentionally developed as a learning and portfolio environment rather than presented as a production banking platform. The current phase is final portfolio verification and reference-release preparation.
 
 ---
 
@@ -276,65 +276,90 @@ The implementation avoids exposing external-provider data structures directly as
 
 ---
 
-## External Banking Integration — Fiserv
+## External Banking Integration — Fiserv / Finxact
 
-Fiserv integration is implemented behind an NHB-owned service abstraction.
+NHBCAP01 integrates with Fiserv Banking Hub / Finxact certification APIs through NHB-owned application service contracts and provider mapping components.
 
-Representative integration capabilities include:
+Verified integration capabilities include:
 
-- party/customer retrieval
-- customer-list retrieval
-- account-detail retrieval
-- OAuth authentication
-- provider-response mapping
-- OData query handling
-- pagination
-- timeout handling
-- provider-independent error handling
+- OAuth-based authentication and protected API access.
+- Customer, accountholder, and account retrieval.
+- Customer-to-account ownership verification and credit inquiry.
+- Read-only account transaction history, including cursor-based pagination.
+- Provider-to-NHB data mapping and controlled error handling.
+- Read-only transaction-to-financing matching preview.
+- Explicit allocation of a certification-environment credit to a synthetic Murabaha installment.
+- Source transaction identity preservation and duplicate-allocation rejection.
+- SAP HANA payment persistence and creation of a PENDING accounting event.
 
-The architecture follows an anti-corruption principle:
+The verified allocation demonstrates a controlled connection between external banking transaction evidence and NHB financing servicing. It does not represent an actual customer repayment, automatic repayment classification, or production-certified financial processing.
 
-    NHB Service Contract
-            ↓
-    NHB Mapping / Integration Layer
-            ↓
-    Fiserv API Contract
+The integration follows an anti-corruption architecture:
 
-Provider-specific fields are not treated automatically as NHB domain semantics.
+```text
+NHB Business Service Contract
+          ↓
+NHB Provider Mapping and Integration Layer
+          ↓
+Fiserv Banking Hub / Finxact APIs
+```
 
-External provider indicators and identifiers are interpreted through explicit mapping logic rather than exposed directly to consuming applications.
+Fiserv identifiers and transaction attributes remain distinguishable from NHB-owned business identifiers and accounting decisions.
+
+Provider transaction retrieval, matching, allocation, accounting-event creation, and SAP journal posting are separate operations with explicit responsibility boundaries.
+
+Detailed certification evidence, limitations, and reconciliation findings are maintained in [Fiserv Integration](docs/fiserv-integration.md).
 
 ---
 
-## SAP S/4HANA Accounting Integration
+## ## SAP S/4HANA Accounting Integration
 
-NHBCAP01 contains an accounting-integration baseline for SAP S/4HANA Journal Entry processing.
+NHBCAP01 implements and has verified real SAP S/4HANA journal posting and reversal through the following integration architecture:
 
-The implemented design includes:
+```text
+NHBCAP01 — SAP CAP
+        ↓
+SAP BTP Destination Service
+        ↓
+SAP Integration Suite
+        ↓
+SAP Cloud Connector
+        ↓
+SAP S/4HANA 2025 — CAL Sandbox
+```
 
-- Journal Entry SOAP request generation
-- Journal Entry response mapping
-- Journal Entry reversal request generation
-- Destination-based transport support
-- timeout handling
-- accounting-event persistence
-- external accounting-document identity fields
-- posting-status tracking
+The integration supports:
 
-Representative accounting events include:
+- `PAYMENT_RECEIVED` journal posting and `PAYMENT_REVERSED` reversal processing.
+- SOAP message generation, SAP confirmation parsing, and accounting-document identity persistence.
+- Business correlation propagation through SAP Integration Suite.
+- Controlled connectivity to S/4HANA through SAP Cloud Connector.
+- Restricted posting and reversal permissions for the dedicated integration user.
+- Timeout handling and reconciliation of accounting outcomes against SAP evidence.
 
-    PAYMENT_RECEIVED
-    PAYMENT_REVERSED
+**Verified live SAP execution — 9 October 2026**
 
-The project distinguishes clearly between:
+The following accounting documents were confirmed in S/4HANA, company code 1710, fiscal year 2026:
 
-- tested integration contracts and transport logic
-- configured destination connectivity
-- actual live SAP accounting execution
+| SAP Document | Verification |
+| --- | --- |
+| `0100000060` | Journal posted; application event reconciled after timeout |
+| `0100000061` | Journal posted and automatically confirmed |
+| `0100000062` | Journal posted under restricted service authorization |
+| `0100000063` | Reversal request processed; opposite accounting entries verified in FB03 |
 
-The SAP integration methodology is completed, and the SAP Integration Suite mediation baseline is implemented and verified. The controlled flow includes correlation propagation through `srv/integration/setNhbCorrelationMpl.groovy`, fixture-driven execution through `test/integration-suite-accounting-fixture.sh`, and delivery to the `mock-s4` receiver.
+The original document `0100000062` debited Petty Cash and credited External Payments Clearing for USD 100. The reversal document `0100000063` recorded the opposite entries.
 
-The current SAP S/4HANA receiver is a controlled mock endpoint. Live production-equivalent SAP execution is not claimed until an appropriate SAP S/4HANA environment and communication arrangement are available.
+**Remaining verification limitations**
+
+- Formal SAP reversal linkage between documents `0100000062` and `0100000063` has not yet been independently confirmed.
+- Historical application storage of document `0100000060` requires leading-zero and composite-identifier normalization.
+
+The accounting accounts and configuration are synthetic sandbox mappings, not an approved production Murabaha accounting policy.
+
+The previous controlled mock-receiver integration remains part of the regression and architecture evidence. The later CAL verification establishes real SAP system execution, but does not establish production certification, operational readiness, or regulatory compliance.
+
+See [Integration Suite Runbook](docs/integration-suite-runbook.md) and [SAP Test Catalog](docs/sap-test-catalog.md) for implementation and verification details.
 
 ---
 
@@ -413,15 +438,19 @@ The SAP accounting baseline includes tests for:
 - transport behavior
 - accounting-event processing
 
-The verified test baseline includes:
+The project maintains separate verification baselines for accounting integration, Murabaha servicing, and subsequent application changes.
 
-    SAP accounting suite:
-    44 PASS / 0 FAIL
+| Verification baseline | Recorded result |
+| --- | --- |
+| SAP accounting regression | 44 PASS / 0 FAIL — earlier recorded baseline |
+| Murabaha servicing/accounting regression | 15 PASS / 0 FAIL — earlier recorded baseline |
+| October 10, 2026 validation | 81 tests passed across eight suites |
+| Live SAP S/4HANA accounting | Posting and reversal execution verified October 9, 2026 |
+| Production deployment and data preservation | Deployment successful; seven HANA collections verified unchanged October 10 |
 
-    Murabaha servicing/accounting regression:
-    15 PASS / 0 FAIL
+These are distinct verification activities and should not be added together as one aggregate test count.
 
-These results represent the controlled project environment and are not presented as production certification.
+The implementation uses synthetic financing data and controlled integration environments. Successful validation does not establish production banking certification or complete historical data reconciliation.
 
 ---
 
@@ -468,7 +497,7 @@ The SAP integration methodology is completed. The implemented SAP Integration Su
 
 The implemented baseline complements the existing CAP, Fiserv, and destination-based integration patterns. Broader modeling of Integration Interfaces, Integration Patterns, Integration Services, and explicit Integration Information Flows remains intentionally selective and will be expanded only where supported by concrete implementation requirements.
 
-The current S/4 receiver is the controlled `mock-s4` endpoint; this is not a claim of live SAP S/4HANA execution.
+The original integration baseline used the controlled `mock-s4` receiver. On 9 October 2026, the integration was also verified against a real SAP S/4HANA 2025 CAL sandbox through SAP Cloud Connector.
 
 ---
 
@@ -506,7 +535,7 @@ The logical Technology Architecture is now connected to verified implementation-
 - SAP Integration Suite mediation
 - controlled SAP S/4HANA receiver simulation
 
-Broader physical-technology realization mapping, live SAP S/4HANA connectivity, and selected AWS services remain future scope where additional evidence is justified.
+Broader physical-technology realization mapping and additional AWS services remain future scope where further architectural evidence is justified.
 
 ---
 
@@ -722,18 +751,21 @@ Implemented and verified areas include:
 - Destination Service integration support
 - timeout and error-handling baseline
 - SAP integration methodology
-- SAP Integration Suite mediation baseline, implemented and verified against a controlled mock S/4 receiver
-- SAP accounting regression baseline: **44 PASS / 0 FAIL**
+- SAP Integration Suite mediation verified against both the controlled mock receiver and the live SAP S/4HANA 2025 CAL system through Cloud Connector.
+- Latest recorded validation: 81 tests passed across eight suites (10 October 2026). Earlier SAP and Murabaha regression baselines are documented separately.
 - CAP internals first deep-understanding pass
 - regression testing
+- Verified live S/4HANA journal posting and reversal, including restricted service authorization.
+- Verified Fiserv certification transaction retrieval, cursor pagination, and explicit allocation to a synthetic Murabaha installment.
+- Verified HANA payment duplicate protection and optimistic concurrency safeguards in tested scenarios.
+- Completed controlled reconstruction of 52 historical payment records, preserving original identifiers and available audit evidence.
+- Verified October 10 deployment and preservation of all seven monitored HANA collections.
 
-The current phase is portfolio packaging and polish.
+The current phase is final portfolio verification and reference-release preparation.
 
 ---
 
 ## Intentionally Deferred
-
-The following are intentionally deferred rather than treated as missing baseline work:
 
 - full system-of-record ownership modeling
 - comprehensive Information Flow modeling
@@ -743,7 +775,9 @@ The following are intentionally deferred rather than treated as missing baseline
 - expanded traceability-view presentation
 - broader Information, Integration, and physical Technology modeling where additional evidence justifies it
 - additional SAP or AWS tooling where it adds genuine architectural value
-- live SAP S/4HANA accounting execution where environment access is required
+- formal SAP reversal-document linkage verification and historical accounting-document identity normalization
+- resolution of two unsupported historical payment records referenced by reversals
+- resolution of six historical installment reconciliation discrepancies
 
 These items will be introduced when implementation evidence is sufficient to support defensible architectural relationships and technical claims.
 
@@ -751,17 +785,11 @@ These items will be introduced when implementation evidence is sufficient to sup
 
 ## Next Phase
 
-The current project phase is **portfolio packaging and polish**.
+The current phase is final verification, portfolio documentation alignment, and preparation of the NHBCAP01 v1.0 reference release.
 
-Current priorities include:
+Following release, the verified baseline will be preserved while further work proceeds separately through structured learning and practical assignments covering BIAN, Sparx EA, SAP CAP, Cloud Foundry, and related integration technologies.
 
-1. consolidating the completed AV-03 v1.0 realization evidence
-2. polishing repository navigation, diagrams, runbooks, and cross-references
-3. refining the repeatable demonstration and interview narrative
-4. preserving the controlled evidence boundary around the mock S/4 receiver
-5. defining prerequisites and acceptance criteria for any future live-system validation
-
-The project will continue to prefer a small number of meaningful, end-to-end implementations over superficial use of many technologies.
+Additional experiments will not alter the frozen reference baseline without separate review and verification.
 
 ---
 
@@ -789,7 +817,7 @@ This distinction is maintained throughout the project so that the architecture a
 
 NHBCAP01 is a learning, architecture, and portfolio project.
 
-The project uses synthetic demonstration data and controlled integration environments.
+The project uses synthetic demonstration data and controlled integration environments. Real journal posting and reversal were verified in an SAP S/4HANA 2025 CAL sandbox. This demonstrates technical integration with an actual SAP system, not production deployment, formal certification, or an approved banking accounting design.
 
 It does not claim:
 

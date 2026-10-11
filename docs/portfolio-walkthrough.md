@@ -1,100 +1,255 @@
-# NHBCAP01 Portfolio Walkthrough
+# NHBCAP01 — Portfolio Walkthrough
 
-## Purpose and audience
+**Enterprise Architecture & Banking Integration Reference Implementation**
 
-This walkthrough presents NHBCAP01 as a traceable architecture and implementation portfolio for an architecture or engineering reviewer. It connects enterprise capabilities, business processes, application controls, external integration, and verification evidence through one Murabaha financing scenario.
+**Version:** 1.0 — Release candidate
+**Evidence baseline:** 10 October 2026
+**Demonstration duration:** 15–20 minutes
+**Audience:** Enterprise architects, banking transformation leaders, solution architects, and technical reviewers
 
-The prototype uses synthetic data and demonstrates a non-production learning baseline. AV-03 — NHBCAP01 Architecture-to-Implementation Realization is completed as v1.0. The first CAP internals deep-understanding pass is completed, and portfolio packaging is the current phase.
+---
 
-## Opening narrative
+## 1. Purpose and Executive Summary
 
-NHB owns its business-facing service contracts and Murabaha domain controls. Sparx EA describes the enterprise structure and cross-layer relationships; SAP Signavio describes process behavior; SAP CAP makes selected controls executable. Fiserv Banking Hub / Finxact supplies external banking capabilities. SAP Integration Suite mediates the implemented SAP accounting contract to a controlled mock S/4HANA receiver.
+NHBCAP01 demonstrates how enterprise architecture and banking transformation decisions can be translated into executable application controls, external banking integration, and verifiable accounting outcomes.
 
-The central portfolio claim is that a business control can be followed from architecture and process intent to application behavior and recorded verification evidence.
+The project uses Sharia-compliant Murabaha financing as its principal business scenario, connecting:
 
-## Demonstration sequence
+- Enterprise capabilities, value streams, and business processes.
+- Banking application services and information ownership.
+- Governed financing lifecycle and servicing operations.
+- Fiserv Banking Hub / Finxact certification integration.
+- SAP BTP application development and cloud persistence.
+- SAP Integration Suite mediation and live S/4HANA accounting execution.
+- Automated validation and recorded implementation evidence.
 
-Use a 15–20 minute walkthrough. The sequence below reviews existing artifacts and recorded evidence; it does not require running financial operations or changing deployed configuration.
+The implementation uses synthetic financing data and controlled integration environments. It is not represented as a production banking system.
 
-### 1. Establish the architecture boundary
+**Central portfolio claim:** Selected banking business controls can be traced from architecture intent through implemented application behavior to independently reviewable verification evidence.
 
-Show AV-03 v1.0 in Sparx EA and explain the separation between logical architecture and implementation technology. Follow the relationships from capability and business process to application service, application component, and implementation evidence.
+## 2. Architecture and Implementation Landscape
 
-Use [Architecture](architecture.md), [EA Understanding Guide](ea-understanding-guide.md), and [EA Governance Baseline](ea-governance-baseline.md) as the repository references. Retain the approved capability-domain terminology, including CD-03 Deposit Management and CD-04 Financing & Credit Management.
+The reference implementation uses the following responsibilities:
 
-### 2. Follow one Murabaha process
+| Layer | Technology / Evidence | Responsibility |
+| --- | --- | --- |
+| Enterprise architecture | Sparx Enterprise Architect | Capabilities, value streams, processes, application architecture, traceability |
+| Business process | SAP Signavio | Murabaha end-to-end BPMN and control activities |
+| Application implementation | SAP CAP / Node.js | Governed financing services, payment controls, accounting events |
+| Application deployment | SAP BTP Cloud Foundry | Deployed CAP services and authentication |
+| Information persistence | SAP HANA / HDI | Financing, installment, payment, reversal, and accounting-event persistence |
+| Banking integration | Fiserv Banking Hub / Finxact | External customer, account, transaction, and certification evidence |
+| Accounting mediation | SAP Integration Suite | Transport, message routing, correlation, and SAP connectivity |
+| SAP backend connectivity | SAP Cloud Connector | Controlled access to the CAL environment |
+| Accounting system | SAP S/4HANA 2025 CAL | Verified journal posting and reversal |
+| Verification | Automated tests and recorded evidence | Behavior, integrity, deployment, and integration assurance |
 
-Show the SAP Signavio model `04 – VS-04.01 Murabaha Financing — End-to-End BPMN`. Follow credit approval, Sharia approval, asset acquisition and bank ownership, sale-contract execution, delivery, and activation.
+The solution maintains NHB-owned business contracts rather than exposing external provider contracts directly as enterprise business semantics.
 
-Explain why each recorded decision or evidence field is a prerequisite for the next governed action. Use the traceability matrix in [Islamic Banking / Murabaha Product Track](islamic-banking-product-track.md) to connect process activities to CAP actions.
+## 3. Demonstration Sequence
 
-### 3. Show executable controls
+### Step 1 — Establish the enterprise architecture boundary
 
-Review the CDS service contract and selected handlers in `srv/service.cds` and `srv/service.js`. Show the governed lifecycle actions and the payment and reversal boundaries.
+**Suggested duration: 2–3 minutes**
 
-Use recorded regression evidence to demonstrate rejection before activation, duplicate-payment and overpayment prevention, reversal before settlement, valid servicing while defaulted, and automatic settlement after all installments are paid. Explain that servicing changes and their accounting events are persisted in the same CAP request transaction.
+Present AV-03 — NHBCAP01 Architecture-to-Implementation Realization v1.0 in Sparx EA.
 
-The supporting regression scripts are `test/murabaha-lifecycle.sh`, `test/murabaha-servicing.sh`, and `test/murabaha-exceptional-states.sh`. Consult the product-track documentation for their scope and fixture behavior before any later live demonstration.
+Explain the relationship between business capability, business process, application service, application component, and implementation evidence.
 
-### 4. Follow the accounting handoff
+Demonstrate the selected traceability chain, using Financing & Credit Management as the principal domain.
 
-Trace a `PAYMENT_RECEIVED` accounting event from initial `PENDING` status through `postAccountingEvent`, configuration validation, mapping, SOAP construction, transport, confirmation parsing, and persistence of the returned document identity.
+Supporting references:
 
-Then show how `PAYMENT_REVERSED` locates the original posted event and uses its accounting document, company code, and fiscal year to construct the dedicated reversal request. Explain why a successful HTTP response alone is insufficient to mark an event `POSTED`.
+- [Architecture](architecture.md)
+- [EA Understanding Guide](ea-understanding-guide.md)
+- [EA Governance Baseline](ea-governance-baseline.md)
 
-Use `srv/sap/` and the [SAP Test Catalog](sap-test-catalog.md). Distinguish failures after a posting attempt begins, which record `FAILED` and error evidence, from missing configuration before the attempt, which leaves the event `PENDING`.
+Distinguish logical architecture relationships from implementation-specific technologies.
 
-### 5. Show mediation and correlation evidence
+### Step 2 — Follow the Murabaha business process
 
-Follow the verified path:
+**Suggested duration: 2 minutes**
+
+Present the SAP Signavio model:
+
+`04 – VS-04.01 Murabaha Financing — End-to-End BPMN`
+
+Follow the controlled sequence from credit assessment and Sharia approval through asset acquisition, sale-contract execution, delivery, activation, and servicing.
+
+Explain why a financing operation cannot proceed without the required business decision and evidence.
+
+Use the [Islamic Banking Product Track](islamic-banking-product-track.md) to connect BPMN activities to CAP application actions.
+
+### Step 3 — Demonstrate executable financing controls
+
+**Suggested duration: 3 minutes**
+
+Review selected service definitions and handlers in:
+
+- `srv/service.cds`
+- `srv/service.js`
+
+Present evidence for lifecycle governance, payment acceptance, duplicate-payment rejection, overpayment protection, reversal controls, default handling, and settlement.
+
+Highlight verified HANA behavior:
+
+- Duplicate payment references rejected under tested concurrent conditions.
+- Optimistic installment-balance conflicts detected.
+- Accepted payments and associated accounting events persisted consistently.
+- Rejected operations did not create additional payment or accounting-event records in the verified scenarios.
+
+These findings demonstrate tested application controls rather than exhaustive production concurrency assurance.
+
+### Step 4 — Trace accounting integration to live SAP S/4HANA
+
+**Suggested duration: 3–4 minutes**
+
+Follow a `PAYMENT_RECEIVED` accounting event through the verified integration path:
 
 ```text
-NHBCAP01 CAP action
-        → SAP BTP Destination
-        → SAP Integration Suite
-        → controlled mock S/4HANA receiver
-        → confirmation and CAP persistence
+NHBCAP01 — SAP CAP
+        ↓
+SAP BTP Destination Service
+        ↓
+SAP Integration Suite
+        ↓
+SAP Cloud Connector
+        ↓
+SAP S/4HANA 2025 — CAL Sandbox
 ```
 
-Use the recorded normal-posting and reversal evidence in the [Integration Suite Runbook](integration-suite-runbook.md) and SAP Test Catalog. Show business correlation propagation as `X-Correlation-ID` and searchable MPL enrichment as `NHB_CorrelationId`. Explain that the SAP-safe 16-character `DocumentReferenceID` is derived separately from the accounting-event UUID.
+Explain accounting-event mapping, SOAP request construction, SAP confirmation parsing, and persistence of the returned document identity.
 
-Describe returned accounting identities here as controlled mock responses. They do not prove creation of a live SAP accounting document.
+Present the verified October 9 SAP accounting documents:
 
-### 6. Show the external banking abstraction
+| SAP document | Recorded evidence |
+| --- | --- |
+| `0100000060` | Posting confirmed in S/4HANA; application event reconciled following an earlier timeout |
+| `0100000061` | Posting automatically confirmed and persisted |
+| `0100000062` | Posting succeeded with restricted service authorization |
+| `0100000063` | Reversal execution confirmed; opposite accounting entries verified in FB03 |
 
-Use [Fiserv Integration](fiserv-integration.md) to show the verified Account Details and Accountholder retrieval paths. Explain the provider-to-NHB mapping, supported customer query behavior, and provisional `PartyId` to `CustomerNumber` mapping.
+The original posting and reversal used company code 1710, fiscal year 2026, and USD 100.
 
-Keep this evidence distinct from Murabaha servicing: the recorded Fiserv integration verifies read-only external banking access; it does not establish that Murabaha payment processing runs through Finxact.
+Explain why a transport-level success or timeout cannot independently establish the business outcome of SAP accounting execution.
 
-### 7. Close with verification and remaining milestones
+**Verification boundary:** The formal SAP original-to-reversal document linkage requires separate confirmation. Historical document `0100000060` also requires application-side identifier normalization.
 
-Present the recorded baseline below, then identify live SAP posting and reversal as the remaining external verification milestone. Explain how the architecture preserves clear ownership boundaries while allowing that later verification.
+The SAP accounting configuration is a sandbox mapping, not an approved production Murabaha accounting design.
 
-## Evidence and claim boundaries
+### Step 5 — Explain integration mediation and observability
 
-| Area | Recorded baseline | Claim boundary |
-| --- | --- | --- |
-| Architecture realization | AV-03 completed as v1.0 | Selected architecture-to-implementation traceability |
-| CAP understanding | First deep-understanding pass completed | Learning/reference checkpoint |
-| Murabaha servicing | Local and Cloud Foundry verification; 15 passed, 0 failed | Synthetic prototype controls |
-| CAP accounting boundary | 4 passed, 0 failed | Governed action and persistence behavior under controlled responses |
-| SAP accounting/integration regression | 44 passed, 0 failed | Recorded automated baseline; no fresh test run claimed by this walkthrough |
-| Integration Suite | Normal posting, reversal, and correlation verified to a controlled mock receiver | Implemented mediation; live SAP execution pending |
-| Fiserv / Finxact | Account Details and Accountholder retrieval verified | Read-only certification integration; provisional customer identity mapping |
-| Live SAP S/4HANA | SAP-T05 and SAP-T05R pending | No live accounting posting or reversal claim |
+**Suggested duration: 2 minutes**
 
-## Portfolio evidence package
+Present the SAP Integration Suite flow and supporting monitoring evidence.
 
-The versioned documentation is the narrative and reference layer. Assemble the following visual evidence for presentation alongside it:
+Explain how `X-Correlation-ID` is propagated and recorded as searchable `NHB_CorrelationId` message-processing-log evidence.
 
-- AV-03 v1.0 export showing the selected realization relationships.
-- Signavio Murabaha BPMN export showing the relevant control activities.
-- Selected CAP contract and implementation excerpts connected to those controls.
-- Recorded regression summaries with dates and environment context.
-- Integration Suite monitoring and mock receiver evidence showing the same business correlation.
+Distinguish the earlier controlled mock receiver from the later verified live SAP CAL connection.
 
-The external model exports and monitoring captures are supporting presentation artifacts to assemble; this walkthrough does not claim they have been exported or attached. Use synthetic evidence and exclude credentials and access tokens from all presentation material.
+Describe the use of restricted service authorizations and the importance of inspecting business confirmation messages rather than treating completed middleware execution as proof of successful accounting posting.
 
-## Reviewer takeaway
+Supporting reference:
 
-NHBCAP01 demonstrates a governed chain from enterprise architecture and process controls to executable CAP behavior, external service boundaries, and recorded verification. The implemented mock-mediated SAP accounting baseline and read-only Fiserv integration provide concrete evidence, with live SAP accounting execution explicitly retained as a separate milestone.
+[Integration Suite Runbook](integration-suite-runbook.md)
+
+### Step 6 — Demonstrate external banking integration with Fiserv
+
+**Suggested duration: 3 minutes**
+
+Present the NHB-owned Fiserv integration abstraction.
+
+Review evidence for customer and account retrieval, account ownership verification, credit inquiry, transaction history, and cursor-based pagination.
+
+Explain the standalone read-only matching preview and its explicit review requirements.
+
+Then present the verified October 9 certification allocation scenario:
+
+- One Fiserv certification credit of USD 2.11 explicitly allocated to a synthetic Murabaha installment.
+- Provider transaction identity and allocation reason preserved.
+- Installment updated to `PARTIALLY_PAID`.
+- One `PAYMENT_RECEIVED` accounting event created with status `PENDING`.
+- Repeated allocation rejected with HTTP 409.
+- No SAP accounting posting initiated by this allocation test.
+
+Distinguish external transaction evidence, repayment classification, explicit allocation, and accounting posting as separate responsibilities.
+
+**Claim boundary:** This verifies a controlled certification-environment allocation, not a genuine customer repayment, automatic repayment classification, complete transaction-history ingestion, or production Fiserv certification.
+
+Supporting reference:
+
+[Fiserv Integration](fiserv-integration.md)
+
+### Step 7 — Present verification, integrity, and limitations
+
+**Suggested duration: 2–3 minutes**
+
+Summarize the recorded verification milestones:
+
+| Verification area | Recorded baseline |
+| --- | --- |
+| Enterprise architecture | AV-03 v1.0 realization baseline |
+| Murabaha servicing/accounting regression | Earlier recorded 15 PASS / 0 FAIL |
+| SAP accounting regression | Earlier recorded 44 PASS / 0 FAIL |
+| October 10 automated validation | 81 tests passed across eight suites |
+| Live SAP integration | Actual S/4HANA posting and reversal verified October 9 |
+| Fiserv allocation | Explicit synthetic certification allocation and duplicate rejection verified |
+| HANA persistence | October 10 deployment preserved all seven monitored collections |
+| Payment recovery | 52 historical records reconstructed under controlled recovery procedures |
+| Git security review | Gitleaks v8.30.1 scanned 74 commits on October 11; zero leaks detected |
+
+Test counts describe distinct recorded validation activities and must not be combined into a single aggregate result.
+
+The historical reconstruction preserved available references and recorded unknown original audit information as unknown. It did not manufacture missing accounting evidence or invoke SAP posting.
+
+## 4. Outstanding Findings and Controlled Limitations
+
+The reference release explicitly retains the following boundaries:
+
+- Formal SAP document reversal linkage not yet independently confirmed.
+- Historical SAP document-number and composite-identifier normalization remains open.
+- Two historical missing payment records referenced by reversals remain unsupported.
+- Six historical installment reconciliation discrepancies remain unresolved.
+- Permanent NHB customer identity semantics require a governed business decision.
+- Fiserv automatic repayment classification and complete-history ingestion are not established.
+- Upstream dependency security findings remain open in the `node-forge` and `braces` dependency chains.
+- An earlier intermittent automated test failure was not reproduced; its cause remains undetermined.
+
+These findings are disclosed rather than hidden or represented as completed functionality.
+
+## 5. Portfolio Evidence Package
+
+The reviewer package should make the evidence easy to navigate.
+
+It should include:
+
+1. Sparx EA AV-03 v1.0 and the supporting enterprise architecture repository.
+2. SAP Signavio Murabaha BPMN export.
+3. Selected CAP service contracts and implementation excerpts.
+4. Regression and deployment verification summaries.
+5. Integration Suite monitoring and correlation evidence.
+6. Live SAP journal posting and reversal records, with sensitive information excluded.
+7. Fiserv certification verification records and synthetic allocation example.
+8. HANA recovery documentation and explicitly identified reconciliation exceptions.
+
+Where evidence is retained outside Git, the walkthrough should reference it without claiming the file is included in the published repository.
+
+No credentials, access tokens, private keys, or sensitive operational configuration should be included in public presentation artifacts.
+
+## 6. Scope and Professional Positioning
+
+NHBCAP01 is an enterprise architecture and banking integration reference implementation.
+
+Its value lies in demonstrating how business architecture, banking domain controls, application responsibilities, cloud integration, and verification can be governed as a coherent transformation initiative.
+
+It does not claim production banking readiness, live production processing, regulatory certification, formal Sharia certification, or production security accreditation.
+
+Following the reference release, further BIAN, architecture, CAP, and cloud development exercises will proceed separately from the frozen implementation baseline.
+
+## 7. Reviewer Takeaway
+
+**NHBCAP01 demonstrates architecture-to-implementation traceability through an executable banking scenario supported by verified SAP and Fiserv integration evidence.**
+
+The work connects enterprise capabilities and business processes to governed financing operations, HANA persistence, external banking transactions, real SAP S/4HANA accounting execution, and recorded verification.
+
+The scope and remaining limitations are explicit, allowing reviewers to assess both demonstrated capability and the engineering judgment applied to its implementation.
