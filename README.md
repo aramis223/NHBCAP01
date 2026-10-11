@@ -96,6 +96,24 @@ A lightweight architecture governance baseline defines repository scope, modelin
 
 ---
 
+## Architecture Exhibits
+
+The following diagrams provide visual evidence of the selected
+architecture-to-implementation traceability and Murabaha business process.
+
+### AV-03 — Architecture-to-Implementation Realization
+
+![NHBCAP01 Architecture-to-Implementation Realization](docs/diagrams/AV-03%20%E2%80%94%20NHBCAP01%20Architecture-to-Implementation%20Realization.png)
+
+### VS-04.01 — Murabaha End-to-End BPMN
+
+[View the Signavio Murabaha BPMN diagram](docs/diagrams/04%20%E2%80%93%20VS-04.01%20Murabaha%20Financing%20%E2%80%94%20End-to-End%20BPMN.svg)
+
+These exports represent the recorded architecture and process baselines.
+The implementation and verification evidence are documented separately.
+
+---
+
 ## Key Architecture Views
 
 ### AV-01 — NHB Enterprise Architecture Overview
